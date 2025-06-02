@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,162 +6,267 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dental Office - First Run Setup</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         body {
-            background-color: #f8f9fa;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
         .setup-container {
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 30px;
+            max-width: 900px;
+            width: 100%;
             background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            border-radius: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            overflow: hidden;
+        }
+        .setup-header {
+            background: linear-gradient(135deg, #0d6efd, #0B5ED7);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .setup-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        .setup-header p {
+            margin: 0;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        .setup-content {
+            padding: 40px;
         }
         .form-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
+            margin-bottom: 35px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            background-color: #f8f9fa;
         }
         .form-section h3 {
             margin-bottom: 20px;
             color: #0d6efd;
+            font-size: 1.3rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        .form-section h3 i {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+        .form-control, .form-select {
+            border-radius: 8px;
+            border: 1px solid #ced4da;
+            padding: 12px 16px;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #0d6efd, #0B5ED7);
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(13, 110, 253, 0.3);
+        }
+        .text-muted {
+            font-size: 0.875rem;
+        }
+        @media (max-width: 768px) {
+            .setup-header {
+                padding: 30px 20px;
+            }
+            .setup-header h1 {
+                font-size: 2rem;
+            }
+            .setup-content {
+                padding: 30px 20px;
+            }
+            .form-section {
+                padding: 20px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="setup-container">
-        <h1 class="text-center mb-4">Dental Office Setup</h1>
-        <p class="text-center mb-4">Welcome to the SignalWire Dental Office System. Please configure your environment variables below.</p>
+        <div class="setup-header">
+            <h1><i class="bi bi-gear-fill me-3"></i>SignalWire Dental Office Setup</h1>
+            <p>Welcome! Let's configure your dental office management system.</p>
+        </div>
+        
+        <div class="setup-content">
+            <form action="/setup" method="POST">
+                <!-- Flask Configuration -->
+                <div class="form-section">
+                    <h3><i class="bi bi-server"></i>Flask Configuration</h3>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="FLASK_APP" class="form-label">Flask App</label>
+                            <input type="text" class="form-control" id="FLASK_APP" name="FLASK_APP" value="app.py" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="FLASK_ENV" class="form-label">Flask Environment</label>
+                            <select class="form-select" id="FLASK_ENV" name="FLASK_ENV" required>
+                                <option value="development">Development</option>
+                                <option value="production">Production</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="HOST" class="form-label">Host</label>
+                            <input type="text" class="form-control" id="HOST" name="HOST" value="0.0.0.0" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="PORT" class="form-label">Port</label>
+                            <input type="number" class="form-control" id="PORT" name="PORT" value="8080" required>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label for="SECRET_KEY" class="form-label">Secret Key</label>
+                            <input type="text" class="form-control" id="SECRET_KEY" name="SECRET_KEY" required>
+                            <small class="text-muted">Used for session security and CSRF protection</small>
+                        </div>
+                    </div>
+                </div>
 
-        <form action="/setup" method="POST">
-            <!-- Flask Configuration -->
-            <div class="form-section">
-                <h3>Flask Configuration</h3>
-                <div class="mb-3">
-                    <label for="FLASK_APP" class="form-label">Flask App</label>
-                    <input type="text" class="form-control" id="FLASK_APP" name="FLASK_APP" value="app.py" required>
+                <!-- Database Configuration -->
+                <div class="form-section">
+                    <h3><i class="bi bi-database"></i>Database Configuration</h3>
+                    <div class="mb-3">
+                        <label for="DATABASE_URL" class="form-label">Database URL</label>
+                        <input type="text" class="form-control" id="DATABASE_URL" name="DATABASE_URL" value="sqlite:///dental_office.db" required>
+                        <small class="text-muted">SQLite database will be created if it doesn't exist</small>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label for="FLASK_ENV" class="form-label">Flask Environment</label>
-                    <select class="form-select" id="FLASK_ENV" name="FLASK_ENV" required>
-                        <option value="development">Development</option>
-                        <option value="production">Production</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label for="HOST" class="form-label">Host</label>
-                    <input type="text" class="form-control" id="HOST" name="HOST" value="127.0.0.1" required>
-                </div>
-                <div class="mb-3">
-                    <label for="PORT" class="form-label">Port</label>
-                    <input type="number" class="form-control" id="PORT" name="PORT" value="8080" required>
-                </div>
-                <div class="mb-3">
-                    <label for="SECRET_KEY" class="form-label">Secret Key</label>
-                    <input type="text" class="form-control" id="SECRET_KEY" name="SECRET_KEY" required>
-                    <small class="text-muted">Used for session security and CSRF protection</small>
-                </div>
-            </div>
 
-            <!-- Database Configuration -->
-            <div class="form-section">
-                <h3>Database Configuration</h3>
-                <div class="mb-3">
-                    <label for="DATABASE_URL" class="form-label">Database URL</label>
-                    <input type="text" class="form-control" id="DATABASE_URL" name="DATABASE_URL" value="sqlite:///dental_office.db" required>
-                    <small class="text-muted">SQLite database will be created if it doesn't exist</small>
+                <!-- SignalWire Configuration -->
+                <div class="form-section">
+                    <h3><i class="bi bi-telephone"></i>SignalWire Configuration</h3>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="SIGNALWIRE_PROJECT_ID" class="form-label">Project ID</label>
+                            <input type="text" class="form-control" id="SIGNALWIRE_PROJECT_ID" name="SIGNALWIRE_PROJECT_ID" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="SIGNALWIRE_TOKEN" class="form-label">Token</label>
+                            <input type="password" class="form-control" id="SIGNALWIRE_TOKEN" name="SIGNALWIRE_TOKEN" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="SIGNALWIRE_SPACE" class="form-label">Space URL</label>
+                            <input type="text" class="form-control" id="SIGNALWIRE_SPACE" name="SIGNALWIRE_SPACE" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="FROM_NUMBER" class="form-label">From Number</label>
+                            <input type="tel" class="form-control" id="FROM_NUMBER" name="FROM_NUMBER" placeholder="+12345678900" required>
+                            <small class="text-muted">Enter the SignalWire phone number to send SMS (E.164 format)</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Click to Call Subsection -->
+                    <div class="mt-4 p-3 border rounded" style="background-color: #f8f9fa;">
+                        <h5 class="mb-3" style="color: #0d6efd;"><i class="bi bi-telephone-plus me-2"></i>Click to Call Configuration</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="C2C_API_KEY" class="form-label">Click to Call API Key</label>
+                                <input type="password" class="form-control" id="C2C_API_KEY" name="C2C_API_KEY">
+                                <small class="text-muted">API key for Click to Call functionality (optional)</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="C2C_ADDRESS" class="form-label">Click to Call Address</label>
+                                <input type="text" class="form-control" id="C2C_ADDRESS" name="C2C_ADDRESS">
+                                <small class="text-muted">Click to Call destination address (optional)</small>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- SignalWire Configuration -->
-            <div class="form-section">
-                <h3>SignalWire Configuration</h3>
-                <div class="mb-3">
-                    <label for="SIGNALWIRE_PROJECT_ID" class="form-label">Project ID</label>
-                    <input type="text" class="form-control" id="SIGNALWIRE_PROJECT_ID" name="SIGNALWIRE_PROJECT_ID" required>
+                <!-- Office Configuration -->
+                <div class="form-section">
+                    <h3><i class="bi bi-building"></i>Office Configuration</h3>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="OFFICE_NAME" class="form-label">Office Name</label>
+                            <input type="text" class="form-control" id="OFFICE_NAME" name="OFFICE_NAME" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="OFFICE_PHONE" class="form-label">Office Phone</label>
+                            <input type="tel" class="form-control" id="OFFICE_PHONE" name="OFFICE_PHONE" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="OFFICE_EMAIL" class="form-label">Office Email</label>
+                            <input type="email" class="form-control" id="OFFICE_EMAIL" name="OFFICE_EMAIL" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="OFFICE_ADDRESS" class="form-label">Office Address</label>
+                            <textarea class="form-control" id="OFFICE_ADDRESS" name="OFFICE_ADDRESS" rows="3" required></textarea>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label for="OFFICE_HOURS" class="form-label">Office Hours</label>
+                            <textarea class="form-control" id="OFFICE_HOURS" name="OFFICE_HOURS" rows="3" required></textarea>
+                            <small class="text-muted">Enter office hours in a readable format (e.g., "Monday-Friday: 9:00 AM - 5:00 PM")</small>
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label for="SIGNALWIRE_TOKEN" class="form-label">Token</label>
-                    <input type="password" class="form-control" id="SIGNALWIRE_TOKEN" name="SIGNALWIRE_TOKEN" required>
-                </div>
-                <div class="mb-3">
-                    <label for="SIGNALWIRE_SPACE" class="form-label">Space URL</label>
-                    <input type="text" class="form-control" id="SIGNALWIRE_SPACE" name="SIGNALWIRE_SPACE" required>
-                </div>
-                <div class="mb-3">
-                    <label for="FROM_NUMBER" class="form-label">From Number</label>
-                    <input type="tel" class="form-control" id="FROM_NUMBER" name="FROM_NUMBER" placeholder="+12345678900" required>
-                    <small class="text-muted">Enter the SignalWire phone number to send SMS (E.164 format)</small>
-                </div>
-            </div>
 
-            <!-- Office Configuration -->
-            <div class="form-section">
-                <h3>Office Configuration</h3>
-                <div class="mb-3">
-                    <label for="OFFICE_NAME" class="form-label">Office Name</label>
-                    <input type="text" class="form-control" id="OFFICE_NAME" name="OFFICE_NAME" required>
+                <!-- Security Configuration -->
+                <div class="form-section">
+                    <h3><i class="bi bi-shield-check"></i>Security Configuration</h3>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="ENABLE_CSRF" class="form-label">Enable CSRF Protection</label>
+                            <select class="form-select" id="ENABLE_CSRF" name="ENABLE_CSRF" required>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="SESSION_LIFETIME" class="form-label">Session Lifetime (minutes)</label>
+                            <input type="number" class="form-control" id="SESSION_LIFETIME" name="SESSION_LIFETIME" value="60" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="PASSWORD_MIN_LENGTH" class="form-label">Minimum Password Length</label>
+                            <input type="number" class="form-control" id="PASSWORD_MIN_LENGTH" name="PASSWORD_MIN_LENGTH" value="8" required>
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label for="OFFICE_ADDRESS" class="form-label">Office Address</label>
-                    <textarea class="form-control" id="OFFICE_ADDRESS" name="OFFICE_ADDRESS" rows="3" required></textarea>
-                </div>
-                <div class="mb-3">
-                    <label for="OFFICE_PHONE" class="form-label">Office Phone</label>
-                    <input type="tel" class="form-control" id="OFFICE_PHONE" name="OFFICE_PHONE" required>
-                </div>
-                <div class="mb-3">
-                    <label for="OFFICE_EMAIL" class="form-label">Office Email</label>
-                    <input type="email" class="form-control" id="OFFICE_EMAIL" name="OFFICE_EMAIL" required>
-                </div>
-                <div class="mb-3">
-                    <label for="OFFICE_HOURS" class="form-label">Office Hours</label>
-                    <textarea class="form-control" id="OFFICE_HOURS" name="OFFICE_HOURS" rows="3" required></textarea>
-                    <small class="text-muted">Enter office hours in a readable format (e.g., "Monday-Friday: 9:00 AM - 5:00 PM")</small>
-                </div>
-            </div>
 
-            <!-- Security Configuration -->
-            <div class="form-section">
-                <h3>Security Configuration</h3>
-                <div class="mb-3">
-                    <label for="ENABLE_CSRF" class="form-label">Enable CSRF Protection</label>
-                    <select class="form-select" id="ENABLE_CSRF" name="ENABLE_CSRF" required>
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
-                    </select>
+                <!-- Admin/API User Configuration -->
+                <div class="form-section">
+                    <h3><i class="bi bi-person-badge"></i>Admin/API User Configuration</h3>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="HTTP_USERNAME" class="form-label">HTTP Username</label>
+                            <input type="text" class="form-control" id="HTTP_USERNAME" name="HTTP_USERNAME" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="HTTP_PASSWORD" class="form-label">HTTP Password</label>
+                            <input type="password" class="form-control" id="HTTP_PASSWORD" name="HTTP_PASSWORD" required>
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label for="SESSION_LIFETIME" class="form-label">Session Lifetime (minutes)</label>
-                    <input type="number" class="form-control" id="SESSION_LIFETIME" name="SESSION_LIFETIME" value="60" required>
-                </div>
-                <div class="mb-3">
-                    <label for="PASSWORD_MIN_LENGTH" class="form-label">Minimum Password Length</label>
-                    <input type="number" class="form-control" id="PASSWORD_MIN_LENGTH" name="PASSWORD_MIN_LENGTH" value="8" required>
-                </div>
-            </div>
 
-            <!-- Admin/API User Configuration -->
-            <div class="form-section">
-                <h3>Admin/API User Configuration</h3>
-                <div class="mb-3">
-                    <label for="HTTP_USERNAME" class="form-label">HTTP Username</label>
-                    <input type="text" class="form-control" id="HTTP_USERNAME" name="HTTP_USERNAME" required>
+                <div class="text-center mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-check-circle me-2"></i>Save Configuration & Start Application
+                    </button>
                 </div>
-                <div class="mb-3">
-                    <label for="HTTP_PASSWORD" class="form-label">HTTP Password</label>
-                    <input type="password" class="form-control" id="HTTP_PASSWORD" name="HTTP_PASSWORD" required>
-                </div>
-            </div>
-
-            <div class="text-center">
-                <button type="submit" class="btn btn-primary btn-lg">Save Configuration</button>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html> 
