@@ -1249,10 +1249,252 @@ def get_dentist_schedule():
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
-    # Placeholder implementation
-    if request.method == 'POST':
-        flash('Password reset instructions would be sent if this were implemented.')
     return render_template('forgot_password.html')
+
+@app.route('/api/password/reset/lookup', methods=['POST'])
+def api_password_reset_lookup():
+    """Look up user by email for password reset"""
+    try:
+        data = request.get_json()
+        app.logger.info(f'Password reset lookup request: {data}')
+        
+        if not data:
+            app.logger.error('No JSON data received')
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        email = data.get('email', '').strip().lower()
+        user_type = data.get('user_type', 'patient')  # Default to patient if not specified
+        
+        app.logger.info(f'Extracted email: "{email}", user_type: "{user_type}"')
+        
+        if not email:
+            app.logger.error('Email field is empty or missing')
+            return jsonify({'success': False, 'error': 'Email is required'}), 400
+        
+        db = get_db()
+        
+        # Look up user in appropriate table
+        if user_type == 'dentist':
+            user = db.execute('SELECT id, first_name, last_name, email, phone FROM dentists WHERE LOWER(email) = ?', (email,)).fetchone()
+        else:
+            user = db.execute('SELECT id, first_name, last_name, email, phone FROM patients WHERE LOWER(email) = ?', (email,)).fetchone()
+        
+        if not user:
+            # Don't reveal whether user exists for security
+            return jsonify({'success': False, 'error': 'No user found with that email address'}), 404
+            
+        # Check if user has a phone number
+        if not user['phone']:
+            return jsonify({'success': False, 'error': 'No phone number on file for this account'}), 400
+            
+        return jsonify({
+            'success': True,
+            'message': 'User found',
+            'has_phone': bool(user['phone'])
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Password reset lookup error: {str(e)}')
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+@app.route('/api/password/reset/initiate', methods=['POST'])
+def api_password_reset_initiate():
+    """Send MFA code for password reset using SignalWire MFA system"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip().lower()
+        user_type = data.get('user_type', 'patient')
+        action = data.get('action', 'forgot_password')
+        
+        if not email:
+            return jsonify({'success': False, 'error': 'Email is required'}), 400
+        
+        db = get_db()
+        
+        # Look up user
+        if user_type == 'dentist':
+            user = db.execute('SELECT id, first_name, last_name, email, phone FROM dentists WHERE LOWER(email) = ?', (email,)).fetchone()
+        else:
+            user = db.execute('SELECT id, first_name, last_name, email, phone FROM patients WHERE LOWER(email) = ?', (email,)).fetchone()
+        
+        if not user:
+            # Don't reveal whether user exists for security
+            return jsonify({'success': False, 'error': 'No user found with that email address'}), 404
+            
+        # Check if user has a phone number
+        if not user['phone']:
+            return jsonify({'success': False, 'error': 'No phone number on file for this account'}), 400
+            
+        # Use SignalWire MFA system (same as test-mfa)
+        try:
+            mfa = SignalWireMFA(
+                SIGNALWIRE_PROJECT_ID,
+                SIGNALWIRE_TOKEN,
+                SIGNALWIRE_SPACE,
+                os.getenv('FROM_NUMBER')
+            )
+            response = mfa.send_mfa(user['phone'])
+            mfa_id = response.get('id')
+            
+            if not mfa_id:
+                app.logger.error('MFA ID not found in SignalWire response')
+                return jsonify({'success': False, 'error': 'Failed to send verification code'}), 500
+            
+            # Store the password reset request in our database for tracking
+            reset_id = str(uuid.uuid4())
+            expires_at = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
+            
+            db.execute('''
+                INSERT INTO password_resets (id, user_id, user_type, email, mfa_code, expires_at, verified)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (reset_id, user['id'], user_type, email, mfa_id, expires_at, False))
+            db.commit()
+            
+            app.logger.info(f'Password reset MFA sent to {user["phone"]} for {email}')
+            
+            return jsonify({
+                'success': True,
+                'mfa_id': mfa_id,
+                'message': f'Verification code sent to {user["phone"]}'
+            })
+            
+        except Exception as e:
+            app.logger.error(f'Failed to send MFA for password reset: {e}')
+            return jsonify({'success': False, 'error': 'Failed to send verification code'}), 500
+            
+    except Exception as e:
+        app.logger.error(f'Password reset initiate error: {e}')
+        return jsonify({'success': False, 'error': 'An error occurred'}), 500
+
+@app.route('/api/password/reset/complete', methods=['POST'])
+def api_password_reset_complete():
+    """Verify MFA code and optionally reset password using SignalWire MFA system"""
+    try:
+        data = request.get_json()
+        mfa_id = data.get('mfa_id')
+        code = data.get('code')
+        new_password = data.get('new_password')
+        action = data.get('action', 'reset_password')
+        reset_token = data.get('reset_token')  # For password reset after MFA verification
+        
+        app.logger.info(f'Password reset request: action={action}, mfa_id={mfa_id}, has_reset_token={bool(reset_token)}')
+        
+        db = get_db()
+        
+        # If we have a reset_token, this is the final password reset step
+        if reset_token and new_password:
+            # Find the verified reset request using the token
+            reset_request = db.execute('''
+                SELECT * FROM password_resets 
+                WHERE id = ? AND verified = 1
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (reset_token,)).fetchone()
+            
+            if not reset_request:
+                return jsonify({'success': False, 'error': 'Invalid or expired reset session'}), 404
+            
+            # Check if request has expired
+            expires_at = datetime.fromisoformat(reset_request['expires_at'])
+            if datetime.utcnow() > expires_at:
+                return jsonify({'success': False, 'error': 'Reset session has expired'}), 400
+            
+            # Validate new password
+            if len(new_password) < 8:
+                return jsonify({'success': False, 'error': 'Password must be at least 8 characters long'}), 400
+            
+            # Hash the new password
+            password_hash, salt = hash_password(new_password)
+            
+            # Update password in appropriate table
+            if reset_request['user_type'] == 'dentist':
+                db.execute('UPDATE dentists SET password_hash = ?, password_salt = ? WHERE id = ?', 
+                          (password_hash, salt, reset_request['user_id']))
+            else:
+                db.execute('UPDATE patients SET password_hash = ?, password_salt = ? WHERE id = ?', 
+                          (password_hash, salt, reset_request['user_id']))
+            
+            # Clean up the reset request
+            db.execute('DELETE FROM password_resets WHERE id = ?', (reset_request['id'],))
+            db.commit()
+            
+            app.logger.info(f'Password reset completed for {reset_request["user_type"]} {reset_request["email"]}')
+            
+            return jsonify({
+                'success': True,
+                'message': 'Password reset successfully! You can now log in with your new password.'
+            })
+        
+        # Otherwise, this is MFA verification step
+        if not mfa_id or not code:
+            return jsonify({'success': False, 'error': 'Missing MFA ID or verification code'}), 400
+        
+        app.logger.info(f'Password reset MFA verification attempt for MFA ID: {mfa_id}')
+        
+        # Check if we have a valid password reset request
+        reset_request = db.execute('''
+            SELECT * FROM password_resets 
+            WHERE mfa_code = ? AND verified = 0
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (mfa_id,)).fetchone()
+        
+        if not reset_request:
+            return jsonify({'success': False, 'error': 'Password reset request not found or already used'}), 404
+        
+        # Check if request has expired (15 minutes)
+        expires_at = datetime.fromisoformat(reset_request['expires_at'])
+        if datetime.utcnow() > expires_at:
+            return jsonify({
+                'success': False, 
+                'error': 'Verification session has expired. Please request a new password reset.',
+                'expired': True
+            }), 400
+        
+        # Verify the MFA code using SignalWire (only once!)
+        try:
+            mfa = SignalWireMFA(
+                SIGNALWIRE_PROJECT_ID,
+                SIGNALWIRE_TOKEN,
+                SIGNALWIRE_SPACE,
+                os.getenv('FROM_NUMBER')
+            )
+            result = mfa.verify_mfa(mfa_id, code)
+            
+            if not result.get('success'):
+                error_msg = result.get('message', 'Invalid verification code')
+                app.logger.warning(f'SignalWire MFA verification failed: {error_msg}')
+                return jsonify({'success': False, 'error': error_msg}), 401
+                
+        except Exception as e:
+            app.logger.error(f'SignalWire MFA verification failed: {e}')
+            
+            # Check if this is a 404 error (expired MFA session)
+            if "404" in str(e):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Verification code has expired. Please request a new password reset.',
+                    'expired': True
+                }), 401
+            else:
+                return jsonify({'success': False, 'error': 'Verification failed. Please try again.'}), 500
+        
+        # MFA verification successful - mark as verified
+        db.execute('UPDATE password_resets SET verified = 1 WHERE id = ?', (reset_request['id'],))
+        db.commit()
+        
+        app.logger.info(f'Password reset MFA verified successfully for {reset_request["email"]}')
+        
+        # Return the reset token for the password reset step
+        return jsonify({
+            'success': True, 
+            'message': 'Verification successful',
+            'reset_token': reset_request['id']  # Use the reset request ID as the token
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Password reset complete error: {e}')
+        return jsonify({'success': False, 'error': 'An error occurred processing your request'}), 500
 
 @app.route('/appointments')
 def appointments():
@@ -3223,7 +3465,7 @@ def api_create_treatment():
 
         # Generate unique bill number
         bill_number = generate_unique_bill_number()
-        
+
         # Insert corresponding bill
         db.execute('''
             INSERT INTO billing (
@@ -4185,10 +4427,10 @@ def send_bill_mms():
                        (SELECT SUM(amount) FROM payments WHERE billing_id = b.id), 
                        0
                    ) as amount_paid
-            FROM billing b
-            JOIN dental_services s ON b.service_id = s.id
+        FROM billing b
+        JOIN dental_services s ON b.service_id = s.id
             JOIN patients p ON b.patient_id = p.id
-            LEFT JOIN dentists d ON b.dentist_id = d.id
+        LEFT JOIN dentists d ON b.dentist_id = d.id
             LEFT JOIN treatment_history t ON b.reference_number = t.reference_number
             WHERE b.id = ? AND b.patient_id = ?
         ''', (bill_id, session['user_id'])).fetchone()
