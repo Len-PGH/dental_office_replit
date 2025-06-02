@@ -62,7 +62,7 @@
         <div class="login-container">
             <div class="logo">
                 <img src="{{ url_for('serve_static', filename='css/dental_logo.png') }}" alt="Dental Office Logo">
-                <h2>Dental Office</h2>
+                <h2>SignalWire Dental Office System</h2>
             </div>
             
             <form method="POST" action="{{ url_for('login') }}">
@@ -109,8 +109,8 @@
                         <div class="modal-body">
                             <form id="emailForm">
                                 <div class="mb-3">
-                                    <label for="email" class="form-label">Email Address</label>
-                                    <input type="email" class="form-control" id="email" name="email" required placeholder="Enter your email address">
+                                    <label for="forgotEmail" class="form-label">Email Address</label>
+                                    <input type="email" class="form-control" id="forgotEmail" name="email" required placeholder="Enter your email address">
                                 </div>
                                 <button type="submit" class="btn btn-primary w-100">Next</button>
                             </form>
@@ -133,6 +133,32 @@
                 </div>
             </div>
 
+            <!-- New Password Modal -->
+            <div class="modal fade" id="newPasswordModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Set New Password</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="resetForm">
+                                <div class="mb-3">
+                                    <label for="newPassword" class="form-label">New Password</label>
+                                    <input type="password" class="form-control" id="newPassword" name="newPassword" required minlength="8" placeholder="Enter new password">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                                    <input type="password" class="form-control" id="confirmPassword" name="confirmPassword" required minlength="8" placeholder="Confirm new password">
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">Reset Password</button>
+                            </form>
+                            <div id="resetAlertBox" class="alert mt-3 d-none"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="text-center mt-4">
                 <div class="alert alert-secondary" style="font-size: 0.95em;">
                     <strong>Demo Logins:</strong><br>
@@ -149,6 +175,7 @@
         let currentEmail = null;
         let mfaVerified = false;
         let currentForgotUserType = 'patient'; // default
+        let currentResetToken = null; // Store the reset token after MFA verification
 
         document.querySelectorAll('.role-option').forEach(option => {
             option.addEventListener('click', function() {
@@ -172,8 +199,11 @@
 
         document.getElementById('emailForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const email = document.getElementById('email').value;
+            const email = document.getElementById('forgotEmail').value;
             currentEmail = email;
+            
+            // First, validate the user exists by trying to log them in temporarily
+            // We'll check if user exists without actually logging in
             fetch('/api/password/reset/lookup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -182,6 +212,10 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
+                    // User exists, now we need to authenticate them to use test-mfa
+                    // For password reset, we'll use a special session
+                    sessionStorage.setItem('password_reset_email', email);
+                    sessionStorage.setItem('password_reset_user_type', currentForgotUserType);
                     document.getElementById('emailForm').style.display = 'none';
                     document.getElementById('sendCodeInfo').style.display = 'block';
                 } else {
@@ -195,10 +229,15 @@
         });
 
         document.getElementById('sendCodeBtn').addEventListener('click', function() {
+            // Create a temporary login session to use test-mfa
             fetch('/api/password/reset/initiate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: currentEmail })
+                body: JSON.stringify({ 
+                    email: currentEmail, 
+                    user_type: currentForgotUserType,
+                    action: 'forgot_password'
+                })
             })
             .then(response => response.json())
             .then(data => {
@@ -219,29 +258,113 @@
         document.getElementById('mfaForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const code = document.getElementById('mfaCode').value;
+            
+            // Step 1: Verify MFA code and get reset token
             fetch('/api/password/reset/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mfa_id: currentMfaId, code: code })
+                body: JSON.stringify({ 
+                    mfa_id: currentMfaId, 
+                    code: code,
+                    action: 'verify_only'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.reset_token) {
+                    currentResetToken = data.reset_token; // Store the reset token
+                    showAlert('Verification successful. Please enter your new password.', 'success');
+                    document.getElementById('mfaForm').style.display = 'none';
+                    // Close the forgot password modal
+                    const forgotModal = bootstrap.Modal.getInstance(document.getElementById('forgotPasswordModal'));
+                    forgotModal.hide();
+                    // Show the new password modal
+                    const newPasswordModal = new bootstrap.Modal(document.getElementById('newPasswordModal'));
+                    newPasswordModal.show();
+                } else {
+                    // Check if the session expired
+                    if (data.expired) {
+                        showAlert(data.error + ' Please start over.', 'warning');
+                        // Reset the form to allow starting over
+                        setTimeout(() => {
+                            document.getElementById('mfaForm').style.display = 'none';
+                            document.getElementById('sendCodeInfo').style.display = 'none';
+                            document.getElementById('emailForm').style.display = 'block';
+                            document.getElementById('mfaCode').value = '';
+                            currentMfaId = null;
+                        }, 3000);
+                    } else {
+                        showAlert(data.error || 'Invalid code', 'danger');
+                    }
+                }
+            })
+            .catch(error => {
+                showAlert('Failed to verify code. Please try again.', 'danger');
+                console.error('MFA verification error:', error);
+            });
+        });
+
+        document.getElementById('resetForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            // Clear previous alerts
+            document.getElementById('resetAlertBox').classList.add('d-none');
+            
+            if (newPassword !== confirmPassword) {
+                showResetAlert('Passwords do not match', 'danger');
+                return;
+            }
+            
+            if (newPassword.length < 8) {
+                showResetAlert('Password must be at least 8 characters long', 'danger');
+                return;
+            }
+            
+            if (!currentResetToken) {
+                showResetAlert('Invalid session. Please restart the password reset process.', 'danger');
+                return;
+            }
+            
+            // Step 2: Reset password using the reset token
+            fetch('/api/password/reset/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    reset_token: currentResetToken,
+                    new_password: newPassword 
+                })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showAlert('Verification successful. Please enter your new password.', 'success');
-                    document.getElementById('mfaForm').style.display = 'none';
-                    const modal = new bootstrap.Modal(document.getElementById('newPasswordModal'));
-                    modal.show();
+                    showResetAlert('Password reset successfully! You can now log in with your new password.', 'success');
+                    setTimeout(() => {
+                        // Close the modal and reload the page
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('newPasswordModal'));
+                        modal.hide();
+                        location.reload();
+                    }, 2000);
                 } else {
-                    showAlert(data.error || 'Invalid code', 'danger');
+                    showResetAlert(data.error || 'Failed to reset password', 'danger');
                 }
             })
             .catch(error => {
-                showAlert('Failed to verify code', 'danger');
+                showResetAlert('Failed to reset password', 'danger');
+                console.error('Password reset error:', error);
             });
         });
 
         function showAlert(message, type) {
             const alertBox = document.getElementById('alertBox');
+            alertBox.textContent = message;
+            alertBox.className = 'alert alert-' + type + ' mt-3';
+            alertBox.classList.remove('d-none');
+        }
+        
+        function showResetAlert(message, type) {
+            const alertBox = document.getElementById('resetAlertBox');
             alertBox.textContent = message;
             alertBox.className = 'alert alert-' + type + ' mt-3';
             alertBox.classList.remove('d-none');
