@@ -19,6 +19,13 @@ A comprehensive web-based dental office management system powered by **SignalWir
 - SignalWire Account (for SMS/MMS/Voice features)
 - Modern web browser
 
+## Run on Replit
+
+Click the button below to import and run this project on Replit:
+
+[![Run on Replit](https://replit.com/badge?theme=dark&variant=small)](https://replit.com/new/github/Len-PGH/dental_office_replit)
+
+
 ## 🛠️ Installation & Setup
 
 You have **two options** for setting up the SignalWire Dental Office Management System:
