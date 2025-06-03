@@ -4,6 +4,7 @@ echo "🦷 SignalWire Dental Office Management System"
 echo "================================"
 echo
 
+
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
     echo "📦 Creating virtual environment..."
@@ -17,6 +18,14 @@ source venv/bin/activate
 # Install requirements if needed
 echo "📋 Checking dependencies..."
 pip install -r requirements.txt --quiet
+
+# Initialize database
+echo "🗄️  Initializing database..."
+python3 init_db.py
+
+# Populate test data
+echo "📊 Populating test data..."
+python3 init_test_data.py
 
 # Start the application
 echo "🚀 Starting SignalWire Dental Office Management System..."
