@@ -183,61 +183,61 @@ def init_test_data():
     now = datetime.now()
     appointments = [
         # Upcoming appointments
-        (1, 1, 1, 'cleaning', 'scheduled',
+        (1, 1, 1, 'scheduled',
          (now + timedelta(days=3)).strftime('%Y-%m-%d 09:00:00'),
          (now + timedelta(days=3)).strftime('%Y-%m-%d 10:00:00'),
          'Regular 6-month cleaning', 1),
-        (2, 1, 3, 'filling', 'scheduled',
+        (2, 1, 3, 'scheduled',
          (now + timedelta(days=7)).strftime('%Y-%m-%d 14:00:00'),
          (now + timedelta(days=7)).strftime('%Y-%m-%d 15:30:00'),
          'Cavity filling on molar', 1),
-        (3, 2, 11, 'orthodontics', 'scheduled',
+        (3, 2, 11, 'scheduled',
          (now + timedelta(days=10)).strftime('%Y-%m-%d 11:00:00'),
          (now + timedelta(days=10)).strftime('%Y-%m-%d 12:00:00'),
          'Braces consultation', 1),
-        (4, 3, 8, 'extraction', 'scheduled',
+        (4, 3, 8, 'scheduled',
          (now + timedelta(days=14)).strftime('%Y-%m-%d 15:00:00'),
          (now + timedelta(days=14)).strftime('%Y-%m-%d 16:00:00'),
          'Wisdom tooth extraction', 1),
         
         # Today's appointments
-        (1, 1, 6, 'checkup', 'scheduled',
+        (1, 1, 6, 'scheduled',
          now.strftime('%Y-%m-%d 10:00:00'),
          now.strftime('%Y-%m-%d 11:00:00'),
          'Annual checkup', 1),
-        (5, 1, 12, 'other', 'scheduled',
+        (5, 1, 12, 'scheduled',
          now.strftime('%Y-%m-%d 14:00:00'),
          now.strftime('%Y-%m-%d 15:00:00'),
          'Emergency toothache', 1),
         
         # Recent completed appointments
-        (1, 1, 1, 'cleaning', 'completed',
+        (1, 1, 1, 'completed',
          (now - timedelta(days=180)).strftime('%Y-%m-%d 09:00:00'),
          (now - timedelta(days=180)).strftime('%Y-%m-%d 10:00:00'),
          'Previous cleaning - excellent condition', 1),
-        (2, 1, 6, 'checkup', 'completed',
+        (2, 1, 6, 'completed',
          (now - timedelta(days=30)).strftime('%Y-%m-%d 13:00:00'),
          (now - timedelta(days=30)).strftime('%Y-%m-%d 14:00:00'),
          'Checkup revealed cavity', 1),
-        (3, 2, 5, 'whitening', 'completed',
+        (3, 2, 5, 'completed',
          (now - timedelta(days=45)).strftime('%Y-%m-%d 16:00:00'),
          (now - timedelta(days=45)).strftime('%Y-%m-%d 17:30:00'),
          'Teeth whitening completed successfully', 1),
-        (4, 1, 4, 'root_canal', 'in_progress',
+        (4, 1, 4, 'in_progress',
          (now - timedelta(days=7)).strftime('%Y-%m-%d 10:00:00'),
          (now - timedelta(days=7)).strftime('%Y-%m-%d 12:00:00'),
          'Root canal treatment started', 1),
         
         # Cancelled appointment
-        (5, 2, 1, 'cleaning', 'cancelled',
+        (5, 2, 1, 'cancelled',
          (now - timedelta(days=15)).strftime('%Y-%m-%d 14:00:00'),
          (now - timedelta(days=15)).strftime('%Y-%m-%d 15:00:00'),
          'Patient cancelled due to illness', 0)
     ]
     cursor.executemany('''
-        INSERT OR IGNORE INTO appointments (patient_id, dentist_id, service_id, type,
+        INSERT OR IGNORE INTO appointments (patient_id, dentist_id, service_id,
                                 status, start_time, end_time, notes, sms_reminder)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', appointments)
 
     # Insert comprehensive treatment history
