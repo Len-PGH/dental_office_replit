@@ -32,11 +32,13 @@ CREATE TABLE IF NOT EXISTS dentists (
 
 -- Password Resets table
 CREATE TABLE IF NOT EXISTS password_resets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,  -- UUID for the reset request
     user_id INTEGER NOT NULL,
     user_type TEXT NOT NULL CHECK(user_type IN ('patient', 'dentist')),
-    token TEXT UNIQUE NOT NULL,
-    expiry TIMESTAMP NOT NULL,
+    email TEXT NOT NULL,
+    mfa_code TEXT NOT NULL,  -- 6-digit MFA code
+    expires_at TEXT NOT NULL,  -- ISO format timestamp
+    verified BOOLEAN NOT NULL DEFAULT 0,  -- Whether MFA code has been verified
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

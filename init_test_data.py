@@ -181,63 +181,103 @@ def init_test_data():
 
     # Insert comprehensive appointments
     now = datetime.now()
+    
+    # Calculate dates for current week appointments
+    # Get the current day of the week (0=Monday, 6=Sunday)
+    current_weekday = now.weekday()
+    
+    # Calculate the start and end of the current week
+    week_start = now - timedelta(days=current_weekday)
+    week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+    
+    # Create 3 appointments within the current week, ensuring they're all future
+    # Calculate days from now until end of week
+    days_until_week_end = (week_end.date() - now.date()).days
+    
+    if days_until_week_end >= 3:
+        # Plenty of days left - spread them out
+        week_apt_1 = now + timedelta(days=1, hours=9)   # Tomorrow 9 AM
+        week_apt_2 = now + timedelta(days=2, hours=14)  # Day after tomorrow 2 PM  
+        week_apt_3 = now + timedelta(days=3, hours=11)  # Three days from now 11 AM
+    elif days_until_week_end >= 2:
+        # 2-3 days left - use tomorrow and day after
+        week_apt_1 = now + timedelta(hours=2)           # Later today
+        week_apt_2 = now + timedelta(days=1, hours=10)  # Tomorrow 10 AM
+        week_apt_3 = now + timedelta(days=2, hours=15)  # Day after tomorrow 3 PM
+    elif days_until_week_end >= 1:
+        # 1-2 days left - use today and tomorrow
+        week_apt_1 = now + timedelta(hours=1)           # 1 hour from now
+        week_apt_2 = now + timedelta(hours=4)           # 4 hours from now
+        week_apt_3 = now + timedelta(days=1, hours=10)  # Tomorrow 10 AM
+    else:
+        # Last day of week - all appointments today
+        week_apt_1 = now + timedelta(hours=1)   # 1 hour from now
+        week_apt_2 = now + timedelta(hours=2)   # 2 hours from now
+        week_apt_3 = now + timedelta(hours=4)   # 4 hours from now
+    
     appointments = [
-        # Upcoming appointments
-        (1, 1, 1, 'scheduled',
-         (now + timedelta(days=3)).strftime('%Y-%m-%d 09:00:00'),
-         (now + timedelta(days=3)).strftime('%Y-%m-%d 10:00:00'),
-         'Regular 6-month cleaning', 1),
-        (2, 1, 3, 'scheduled',
-         (now + timedelta(days=7)).strftime('%Y-%m-%d 14:00:00'),
-         (now + timedelta(days=7)).strftime('%Y-%m-%d 15:30:00'),
-         'Cavity filling on molar', 1),
-        (3, 2, 11, 'scheduled',
-         (now + timedelta(days=10)).strftime('%Y-%m-%d 11:00:00'),
-         (now + timedelta(days=10)).strftime('%Y-%m-%d 12:00:00'),
-         'Braces consultation', 1),
-        (4, 3, 8, 'scheduled',
-         (now + timedelta(days=14)).strftime('%Y-%m-%d 15:00:00'),
-         (now + timedelta(days=14)).strftime('%Y-%m-%d 16:00:00'),
+        # 3 CURRENT WEEK APPOINTMENTS - GUARANTEED FUTURE
+        (1, 1, 1, 'cleaning', 'scheduled',
+         week_apt_1.strftime('%Y-%m-%d %H:%M:%S'),
+         (week_apt_1 + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'),
+         'Regular 6-month cleaning - Current week appointment', 1),
+        (2, 1, 3, 'filling', 'scheduled',
+         week_apt_2.strftime('%Y-%m-%d %H:%M:%S'),
+         (week_apt_2 + timedelta(hours=1, minutes=30)).strftime('%Y-%m-%d %H:%M:%S'),
+         'Cavity filling on molar - Current week appointment', 1),
+        (3, 2, 11, 'orthodontics', 'scheduled',
+         week_apt_3.strftime('%Y-%m-%d %H:%M:%S'),
+         (week_apt_3 + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'),
+         'Braces consultation - Current week appointment', 1),
+        
+        # Future appointments (next week and beyond)
+        (4, 3, 8, 'extraction', 'scheduled',
+         (now + timedelta(days=8)).strftime('%Y-%m-%d 15:00:00'),
+         (now + timedelta(days=8)).strftime('%Y-%m-%d 16:00:00'),
          'Wisdom tooth extraction', 1),
+        (5, 1, 5, 'whitening', 'scheduled',
+         (now + timedelta(days=12)).strftime('%Y-%m-%d 11:00:00'),
+         (now + timedelta(days=12)).strftime('%Y-%m-%d 12:30:00'),
+         'Teeth whitening treatment', 1),
         
         # Today's appointments
-        (1, 1, 6, 'scheduled',
-         now.strftime('%Y-%m-%d 10:00:00'),
-         now.strftime('%Y-%m-%d 11:00:00'),
-         'Annual checkup', 1),
-        (5, 1, 12, 'scheduled',
-         now.strftime('%Y-%m-%d 14:00:00'),
-         now.strftime('%Y-%m-%d 15:00:00'),
-         'Emergency toothache', 1),
+        (1, 1, 6, 'checkup', 'scheduled',
+         now.strftime('%Y-%m-%d %H:%M:%S'),
+         (now + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'),
+         'Annual checkup - happening now', 1),
+        (5, 1, 12, 'other', 'scheduled',
+         (now + timedelta(hours=4)).strftime('%Y-%m-%d %H:%M:%S'),
+         (now + timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S'),
+         'Emergency toothache - later today', 1),
         
         # Recent completed appointments
-        (1, 1, 1, 'completed',
+        (1, 1, 1, 'cleaning', 'completed',
          (now - timedelta(days=180)).strftime('%Y-%m-%d 09:00:00'),
          (now - timedelta(days=180)).strftime('%Y-%m-%d 10:00:00'),
          'Previous cleaning - excellent condition', 1),
-        (2, 1, 6, 'completed',
+        (2, 1, 6, 'checkup', 'completed',
          (now - timedelta(days=30)).strftime('%Y-%m-%d 13:00:00'),
          (now - timedelta(days=30)).strftime('%Y-%m-%d 14:00:00'),
          'Checkup revealed cavity', 1),
-        (3, 2, 5, 'completed',
+        (3, 2, 5, 'whitening', 'completed',
          (now - timedelta(days=45)).strftime('%Y-%m-%d 16:00:00'),
          (now - timedelta(days=45)).strftime('%Y-%m-%d 17:30:00'),
          'Teeth whitening completed successfully', 1),
-        (4, 1, 4, 'in_progress',
+        (4, 1, 4, 'root_canal', 'in_progress',
          (now - timedelta(days=7)).strftime('%Y-%m-%d 10:00:00'),
          (now - timedelta(days=7)).strftime('%Y-%m-%d 12:00:00'),
          'Root canal treatment started', 1),
         
         # Cancelled appointment
-        (5, 2, 1, 'cancelled',
+        (5, 2, 1, 'cleaning', 'cancelled',
          (now - timedelta(days=15)).strftime('%Y-%m-%d 14:00:00'),
          (now - timedelta(days=15)).strftime('%Y-%m-%d 15:00:00'),
          'Patient cancelled due to illness', 0)
     ]
     cursor.executemany('''
-        INSERT OR IGNORE INTO appointments (patient_id, dentist_id, service_id,
-                                status, start_time, end_time, notes, sms_reminder)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO appointments (patient_id, dentist_id, service_id, type, status,
+                                start_time, end_time, notes, sms_reminder)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', appointments)
 
     # Insert comprehensive treatment history
