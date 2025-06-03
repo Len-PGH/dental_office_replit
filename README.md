@@ -1,13 +1,13 @@
 # 🦷 SignalWire Dental Office Management System
 
-A comprehensive web-based dental office management system powered by **SignalWire** for voice, SMS, and MMS communications.
+A comprehensive web-based dental office management system powered by **SignalWire** for voice, Click To Call, SMS, and MMS communications.
 
 ## 🚀 Features
 
 - **Patient Management**: Complete patient records and profiles
 - **Treatment History**: Track all dental procedures and notes
 - **Billing System**: 6-digit bill numbers, insurance tracking, and payment processing
-- **Mobile Responsive**: Full mobile interface with 51x40px logo sizing
+- **Digital Employee Live Ai Voice Agent**: Click to Call Ai Voice Agent
 - **SMS/MMS Integration**: Send bills, reminders, and notifications via SignalWire
 - **Multi-Factor Authentication**: SMS-based verification for secure access
 - **Voice AI Integration**: SWAIG endpoints for phone-based interactions
@@ -126,14 +126,6 @@ python init_db.py
 python init_test_data.py
 ```
 
-### 4. Add Bill Numbers (For Existing Databases)
-
-If upgrading from an older version without bill numbers:
-
-```bash
-sqlite3 dental_office.db < migrate_add_bill_number.sql
-```
-
 ## 🚀 Running the Application
 
 ```bash
@@ -200,7 +192,7 @@ The application will be available at:
 ## 🗂️ File Structure
 
 ```
-final_project/
+dental_office_replit/
 ├── app.py                       # Main Flask application
 ├── mfa_util.py                 # Multi-factor authentication utilities
 ├── schema.sql                  # Database schema
@@ -251,9 +243,9 @@ python app.py
 ## 📞 Support
 
 For SignalWire-specific features:
-- [SignalWire Documentation](https://docs.signalwire.com)
-- [SWAIG Documentation](https://docs.signalwire.com/swaig)
+- [SignalWire Documentation](https://developer.signalwire.com)
+
 
 ---
 
-**Powered by SignalWire** - Advanced Communications Platform
+**Powered by SignalWire** - Programmable Unified Communications
