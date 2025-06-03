@@ -22,7 +22,3 @@ externalPort = 80
 
 [workflows]
 runButton = "Run"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash start.sh"
