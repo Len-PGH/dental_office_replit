@@ -104,13 +104,13 @@ def init_test_data():
     # Insert comprehensive dentist data
     dentist_password_hash, dentist_password_salt = hash_password('dentist123')
     dentists = [
-        ('Dr. John', 'Smith', 'dr.smith@dentaloffice.com', '555-0101', 
+        ('Dr. John', 'Smith', 'dr.smith@test.tld', '555-0101', 
          'General Dentistry', 'DENT123456', 
          dentist_password_hash, dentist_password_salt, dr_smith_hours),
-        ('Dr. Sarah', 'Johnson', 'dr.johnson@dentaloffice.com', '555-0103',
+        ('Dr. Sarah', 'Johnson', 'dr.johnson@test.tld', '555-0103',
          'Orthodontics', 'DENT654321',
          dentist_password_hash, dentist_password_salt, dr_johnson_hours),
-        ('Dr. Michael', 'Chen', 'dr.chen@dentaloffice.com', '555-0105',
+        ('Dr. Michael', 'Chen', 'dr.chen@test.tld', '555-0105',
          'Oral Surgery', 'DENT789012',
          dentist_password_hash, dentist_password_salt, dr_chen_hours)
     ]
@@ -123,23 +123,23 @@ def init_test_data():
     # Insert comprehensive patient data
     patient_password_hash, patient_password_salt = hash_password('patient123')
     patients = [
-        ('Jane', 'Doe', 'jane.doe@email.com', '555-0102', 
+        ('Jane', 'Doe', 'jane.doe@test.tld', '555-0102', 
          '123 Main St, Anytown, USA', '1990-01-01',
          'No known allergies', 'Insurance Provider: DentalCare Plus, Policy: DC123456',
          patient_password_hash, patient_password_salt, '8675309'),
-        ('Jim', 'Smith', 'jim.smith@email.com', '555-0104',
+        ('Jim', 'Smith', 'jim.smith@test.tld', '555-0104',
          '456 Elm St, Anytown, USA', '1985-05-15',
          'Penicillin allergy', 'Insurance Provider: HealthFirst, Policy: HF789012',
          patient_password_hash, patient_password_salt, gen_patient_id()),
-        ('Maria', 'Garcia', 'maria.garcia@email.com', '555-0106',
+        ('Maria', 'Garcia', 'maria.garcia@test.tld', '555-0106',
          '789 Oak Ave, Anytown, USA', '1992-08-22',
          'Latex allergy, diabetes', 'Insurance Provider: MediCare Dental, Policy: MD345678',
          patient_password_hash, patient_password_salt, gen_patient_id()),
-        ('Robert', 'Wilson', 'robert.wilson@email.com', '555-0108',
+        ('Robert', 'Wilson', 'robert.wilson@test.tld', '555-0108',
          '321 Pine St, Anytown, USA', '1978-11-30',
          'High blood pressure, takes medication', 'Insurance Provider: DentalCare Plus, Policy: DC901234',
          patient_password_hash, patient_password_salt, gen_patient_id()),
-        ('Emily', 'Brown', 'emily.brown@email.com', '555-0110',
+        ('Emily', 'Brown', 'emily.brown@test.tld', '555-0110',
          '654 Maple Dr, Anytown, USA', '1995-03-18',
          'No known allergies', 'No insurance',
          patient_password_hash, patient_password_salt, gen_patient_id())
@@ -465,21 +465,11 @@ def init_test_data():
     conn.commit()
     conn.close()
     
-    print("✓ Comprehensive test data initialization completed!")
-    print("\n=== Test Data Summary ===")
-    print("• 3 Dentists with different specializations")
-    print("• 5 Patients with diverse backgrounds")
-    print("• 12 Dental services covering all treatment types") 
-    print("• 11 Appointments (past, present, and future)")
-    print("• 9 Treatment history records")
-    print("• 12 Bills with 6-digit bill numbers")
-    print("• 9 Payment records (including one failed)")
-    print("• 10 Insurance claims with various statuses")
-    print("• 9 Payment methods across all patients")
-    print("\n=== Login Credentials ===")
-    print("Dentist: dr.smith@dentaloffice.com / dentist123")
-    print("Patient: jane.doe@email.com / patient123")
-    print("=============================")
+    print("\n=== Test Data Initialized Successfully ===")
+    print("Default Login Credentials:")
+    print("Dentist: dr.smith@test.tld / dentist123")
+    print("Patient: jane.doe@test.tld / patient123")
+    print("=========================================")
 
 if __name__ == '__main__':
     init_test_data()

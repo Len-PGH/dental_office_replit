@@ -1,9 +1,90 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="page-container-narrow">
+<style>
+/* Override problematic MFA styles to prevent shaking */
+#mfaModal {
+  z-index: 1055 !important;
+}
+
+#mfaModal .modal-dialog {
+  max-width: 400px !important;
+  width: 90% !important;
+  margin: 1.75rem auto !important;
+  z-index: 1056 !important;
+  position: relative !important;
+}
+
+#mfaModal .modal-content {
+  z-index: 1057 !important;
+  position: relative !important;
+}
+
+#mfaModal .modal-body {
+  z-index: 1058 !important;
+  position: relative !important;
+}
+
+.mfa-input {
+  font-family: 'Courier New', monospace !important;
+  font-size: 1.2rem !important;
+  letter-spacing: 0.15em !important;
+  text-align: center !important;
+  padding: 0.75rem !important;
+  border: 2px solid var(--gray-300) !important;
+  border-radius: 0.5rem !important;
+  background-color: white !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+  z-index: 1059 !important;
+  position: relative !important;
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+body.dark-mode .mfa-input {
+  background-color: var(--dark-bg-secondary) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text-primary) !important;
+}
+
+.mfa-input:focus {
+  border-color: var(--primary-500) !important;
+  box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25) !important;
+  outline: none !important;
+  z-index: 1060 !important;
+  position: relative !important;
+}
+
+body.dark-mode .mfa-input:focus {
+  border-color: var(--primary-400) !important;
+  box-shadow: 0 0 0 0.25rem rgba(96, 165, 250, 0.25) !important;
+}
+
+/* Force form to be interactive */
+#mfaForm {
+  z-index: 1058 !important;
+  position: relative !important;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  #mfaModal .modal-dialog {
+    max-width: 320px !important;
+    width: 95% !important;
+    margin: 1rem auto !important;
+  }
+  
+  .mfa-input {
+    font-size: 1.1rem !important;
+    padding: 0.6rem !important;
+  }
+}
+</style>
+
+<div class="page-container">
     <div class="row">
-        <div class="col-md-8 mx-auto">
+        <div class="col-md-10 col-lg-8 mx-auto">
             <div class="card">
                 <div class="card-header">
                     <h4 class="mb-0">
@@ -90,8 +171,8 @@
                     </div>
 
                     <!-- MFA Verification Modal -->
-                    <div class="modal fade" id="mfaModal" tabindex="-1" aria-labelledby="mfaModalLabel" aria-hidden="true">
-                        <div class="modal-dialog">
+                    <div class="modal fade" id="mfaModal" tabindex="-1" aria-labelledby="mfaModalLabel" aria-hidden="true" data-bs-backdrop="false" data-bs-keyboard="true">
+                        <div class="modal-dialog modal-dialog-centered">
                             <div class="modal-content">
                                 <div class="modal-header">
                                     <h5 class="modal-title" id="mfaModalLabel">Verify MFA Code</h5>
@@ -101,11 +182,12 @@
                                     <form id="mfaForm">
                                         <input type="hidden" id="mfaIdInput" name="mfa_id">
                                         <div class="mb-3">
-                                            <label for="mfaCodeInput" class="form-label">Enter the code you received</label>
-                                            <input type="text" class="form-control" id="mfaCodeInput" name="code" required>
+                                            <label for="mfaCodeInput" class="form-label">Enter the 6-digit code you received</label>
+                                            <input type="text" class="form-control form-control-lg text-center mfa-input" id="mfaCodeInput" name="code" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="000000" inputmode="numeric" autofocus required>
+                                            <div class="form-text">Check your SMS for the verification code</div>
                                         </div>
                                         <div id="mfaResult" class="mb-2"></div>
-                                        <button type="submit" class="btn btn-primary">Verify</button>
+                                        <button type="submit" class="btn btn-primary w-100">Verify Code</button>
                                     </form>
                                 </div>
                             </div>
@@ -118,7 +200,21 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+// Wait for both DOM and stylesheets to be fully loaded
+function waitForStylesLoaded() {
+    return new Promise((resolve) => {
+        if (document.readyState === 'complete') {
+            resolve();
+        } else {
+            window.addEventListener('load', resolve);
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', async function() {
+    // Wait for stylesheets to load before doing layout operations
+    await waitForStylesLoaded();
+    
     // Theme toggle handler
     const themeToggle = document.getElementById('themeToggle');
     const menuPositionToggle = document.getElementById('menuPositionToggle');
@@ -252,7 +348,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             if (data.success) {
                 document.getElementById('mfaIdInput').value = data.mfa_id;
-                new bootstrap.Modal(document.getElementById('mfaModal')).show();
+                const mfaModal = new bootstrap.Modal(document.getElementById('mfaModal'));
+                mfaModal.show();
             } else {
                 alert(data.error || 'Failed to send test MFA');
             }
@@ -262,10 +359,53 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // MFA Modal event handlers - Delayed focus to prevent layout forcing
+    const mfaModalElement = document.getElementById('mfaModal');
+    
+    // Delayed focus when modal opens to prevent forced layout
+    mfaModalElement.addEventListener('shown.bs.modal', function () {
+        // Wait longer to ensure all layout is complete
+        setTimeout(async () => {
+            await waitForStylesLoaded(); // Double-check styles are loaded
+            
+            const mfaInput = document.getElementById('mfaCodeInput');
+            const resultDiv = document.getElementById('mfaResult');
+            
+            // Clear previous results and input
+            resultDiv.innerHTML = '';
+            mfaInput.value = '';
+            
+            // Simple focus without aggressive style manipulation
+            mfaInput.disabled = false;
+            mfaInput.readOnly = false;
+            
+            // Gentle focus attempt
+            try {
+                mfaInput.focus();
+            } catch (e) {
+                // Ignore focus errors
+                console.log('Focus attempt failed, but continuing...');
+            }
+        }, 500); // Longer delay to ensure layout is stable
+    });
+    
+    // Clear form when modal is hidden
+    mfaModalElement.addEventListener('hidden.bs.modal', function () {
+        document.getElementById('mfaForm').reset();
+        document.getElementById('mfaResult').innerHTML = '';
+    });
+
     // MFA form handler
     document.getElementById('mfaForm').addEventListener('submit', async function(e) {
         e.preventDefault();
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        
         try {
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Verifying...';
+            
             const response = await fetchWithCSRF('/api/verify-mfa', {
                 method: 'POST',
                 headers: {
@@ -281,16 +421,29 @@ document.addEventListener('DOMContentLoaded', function() {
             const resultDiv = document.getElementById('mfaResult');
             
             if (data.success) {
-                resultDiv.innerHTML = '<div class="alert alert-success">MFA verification successful!</div>';
+                resultDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>MFA verification successful!</div>';
                 setTimeout(() => {
                     bootstrap.Modal.getInstance(document.getElementById('mfaModal')).hide();
                 }, 2000);
             } else {
-                resultDiv.innerHTML = '<div class="alert alert-danger">Invalid MFA code</div>';
+                resultDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Invalid MFA code. Please try again.</div>';
+                // Gentle refocus for retry
+                setTimeout(() => {
+                    try {
+                        document.getElementById('mfaCodeInput').focus();
+                        document.getElementById('mfaCodeInput').select();
+                    } catch (e) {
+                        // Ignore focus errors
+                    }
+                }, 100);
             }
         } catch (error) {
             console.error('Error verifying MFA:', error);
-            document.getElementById('mfaResult').innerHTML = '<div class="alert alert-danger">An error occurred while verifying MFA</div>';
+            document.getElementById('mfaResult').innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>An error occurred while verifying MFA</div>';
+        } finally {
+            // Restore button state
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
         }
     });
 });

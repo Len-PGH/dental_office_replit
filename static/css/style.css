@@ -1768,9 +1768,7 @@ applyServiceColors() - automatically applies service colors to elements with dat
 
 /* === CONTAINER STANDARDIZATION === */
 .page-container {
-  padding: var(--space-8) var(--space-6);
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
 }
 
 .page-container-fluid {
@@ -1779,7 +1777,7 @@ applyServiceColors() - automatically applies service colors to elements with dat
 
 .page-container-narrow {
   padding: var(--space-8) var(--space-6);
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 
@@ -3382,3 +3380,120 @@ span:has(i.bi-person-badge),
 div:has(.bi-person-badge) {
   overflow: visible !important;
 }
+
+@media (min-width: 768px) {
+  .main-content {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+  }
+}
+
+/* === MODAL ENHANCEMENTS === */
+
+/* Ensure modals appear above everything */
+.modal {
+  z-index: 1055 !important;
+}
+
+.modal-backdrop {
+  z-index: 1050 !important;
+}
+
+/* Better modal focus handling */
+.modal.show .modal-dialog {
+  transform: none;
+}
+
+.modal .form-control:focus {
+  z-index: auto !important;
+  position: relative !important;
+}
+
+/* MFA Code Input Styling */
+#mfaCodeInput {
+  font-family: 'Courier New', monospace;
+  font-size: 1.5rem;
+  letter-spacing: 0.2em;
+  text-align: center;
+}
+
+#mfaCodeInput:focus {
+  border-color: var(--primary-500) !important;
+  box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25) !important;
+  outline: none !important;
+}
+
+body.dark-mode #mfaCodeInput:focus {
+  border-color: var(--primary-400) !important;
+  box-shadow: 0 0 0 0.25rem rgba(96, 165, 250, 0.25) !important;
+}
+
+/* MFA Modal Sizing */
+#mfaModal .modal-dialog {
+  max-width: 400px !important;
+  width: 90% !important;
+  margin: 1.75rem auto !important;
+}
+
+/* Simplified MFA input styling */
+.mfa-input {
+  font-family: 'Courier New', monospace !important;
+  font-size: 1.2rem !important;
+  letter-spacing: 0.15em !important;
+  text-align: center !important;
+  padding: 0.75rem !important;
+  border: 2px solid var(--gray-300) !important;
+  border-radius: 0.5rem !important;
+  background-color: white !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+body.dark-mode .mfa-input {
+  background-color: var(--dark-bg-secondary) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text-primary) !important;
+}
+
+.mfa-input:focus {
+  border-color: var(--primary-500) !important;
+  box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25) !important;
+  outline: none !important;
+}
+
+body.dark-mode .mfa-input:focus {
+  border-color: var(--primary-400) !important;
+  box-shadow: 0 0 0 0.25rem rgba(96, 165, 250, 0.25) !important;
+}
+
+/* Mobile MFA modal */
+@media (max-width: 768px) {
+  #mfaModal .modal-dialog {
+    max-width: 320px !important;
+    width: 95% !important;
+    margin: 1rem auto !important;
+  }
+  
+  .mfa-input {
+    font-size: 1.1rem !important;
+    padding: 0.6rem !important;
+  }
+}
+
+/* Ensure MFA modal appears above everything else */
+#mfaModal {
+  z-index: 1055 !important;
+}
+
+#mfaModal .modal-dialog {
+  z-index: 1056 !important;
+}
+
+#mfaModal .modal-content {
+  z-index: 1057 !important;
+}
+
+#mfaModal .modal-backdrop {
+  z-index: 1054 !important;
+}
+
+/* Enhanced page container for better responsiveness */

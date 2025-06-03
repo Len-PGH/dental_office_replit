@@ -66,6 +66,7 @@
             </div>
             
             <form method="POST" action="{{ url_for('login') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="role-selector">
                     <div class="role-option active" data-role="patient">
                         <i class="bi bi-person"></i>
@@ -162,8 +163,8 @@
             <div class="text-center mt-4">
                 <div class="alert alert-secondary" style="font-size: 0.95em;">
                     <strong>Demo Logins:</strong><br>
-                    <span>Patient: <code>jane.doe@email.com</code> / <code>patient123</code></span><br>
-                    <span>Dentist: <code>dr.smith@dentaloffice.com</code> / <code>dentist123</code></span>
+                    <span>Patient: <code>jane.doe@test.tld</code> / <code>patient123</code></span><br>
+                    <span>Dentist: <code>dr.smith@test.tld</code> / <code>dentist123</code></span>
                 </div>
             </div>
         </div>
