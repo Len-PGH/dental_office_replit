@@ -4,14 +4,6 @@ echo "🦷 SignalWire Dental Office Management System"
 echo "================================"
 echo
 
-# Check if .env file exists
-if [ ! -f .env ]; then
-    echo "⚠️  No .env file found!"
-    echo "Please run: python setup.py"
-    echo
-    exit 1
-fi
-
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
     echo "📦 Creating virtual environment..."
