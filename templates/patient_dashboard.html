@@ -328,7 +328,7 @@ let serviceTypeMap = {};
 
 function showAppointmentModal(dateStr) {
   // Fetch dental services and populate the dropdown
-  fetch('/api/services')
+  fetchWithCSRF('/api/services')
     .then(response => response.json())
     .then(services => {
       const select = document.getElementById('serviceTypeSelect');
@@ -355,7 +355,7 @@ function showAppointmentModal(dateStr) {
     });
 
   // Fetch dentists and populate the dropdown
-  fetch('/api/dentists')
+  fetchWithCSRF('/api/dentists')
     .then(response => response.json())
     .then(dentists => {
       const select = document.getElementById('dentistSelect');
@@ -378,7 +378,7 @@ function showAppointmentModal(dateStr) {
 }
 
 function rescheduleAppointment(id) {
-  fetch('/api/appointments/' + id)
+  fetchWithCSRF('/api/appointments/' + id)
     .then(function(response) { return response.json(); })
     .then(function(data) {
       document.getElementById('rescheduleAppointmentId').value = id;
@@ -406,11 +406,10 @@ function rescheduleAppointment(id) {
 
 function cancelAppointment(id) {
   if (confirm('Are you sure you want to cancel this appointment?')) {
-    fetch('/api/appointments/' + id + '/cancel', {
+    fetchWithCSRF('/api/appointments/' + id + '/cancel', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': csrfToken
       },
       credentials: 'include'
     })
@@ -430,7 +429,7 @@ function cancelAppointment(id) {
 }
 
 function viewAppointment(id) {
-  fetch('/api/appointments/' + id)
+  fetchWithCSRF('/api/appointments/' + id)
     .then(response => response.json())
     .then(data => {
       document.getElementById('appointmentId').textContent = data.id || data.appointment_id || 'N/A';
@@ -526,7 +525,7 @@ document.addEventListener('DOMContentLoaded', function() {
       },
       events: function(fetchInfo, successCallback, failureCallback) {
         console.log('Fetching appointments for range:', fetchInfo.startStr, 'to', fetchInfo.endStr);
-        fetch(`/api/appointments?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
+        fetchWithCSRF(`/api/appointments?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`)
           .then(response => {
             console.log('Appointments API response status:', response.status);
             if (!response.ok) {
@@ -633,11 +632,10 @@ document.addEventListener('DOMContentLoaded', function() {
       data.start_time = start_time;
       data.end_time = end_time;
 
-      fetch('/api/appointments', {
+      fetchWithCSRF('/api/appointments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken
         },
         body: JSON.stringify(data)
       })
@@ -672,11 +670,10 @@ document.addEventListener('DOMContentLoaded', function() {
         notes: document.getElementById('rescheduleNotes').value,
         sms_reminder: document.getElementById('appointmentSmsReminderSelect').value === 'true'
       };
-      fetch(`/api/appointments/${appointmentId}/reschedule`, {
+      fetchWithCSRF(`/api/appointments/${appointmentId}/reschedule`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken
         },
         body: JSON.stringify(data)
       })

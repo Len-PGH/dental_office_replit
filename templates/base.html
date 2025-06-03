@@ -305,7 +305,7 @@
     // Apply saved theme and menu position on every page load
     document.addEventListener('DOMContentLoaded', function() {
         const savedTheme = localStorage.getItem('theme') || 'dark';
-        const savedMenuPosition = localStorage.getItem('menuPosition') || 'side';
+        const savedMenuPosition = localStorage.getItem('menuPosition') || 'top';
         
         // Apply theme
         if (savedTheme === 'dark') {
@@ -330,6 +330,43 @@
         // Initialize focus management
         initializeFocusManagement();
     });
+    
+    // CSRF Token Helper
+    window.getCSRFToken = function() {
+        return "{{ csrf_token() }}";
+    };
+    
+    // Enhanced fetch with CSRF token
+    window.fetchWithCSRF = function(url, options = {}) {
+        // Set default options
+        options.headers = options.headers || {};
+        
+        // Add CSRF token to headers
+        options.headers['X-CSRFToken'] = window.getCSRFToken();
+        
+        // If it's a POST request with JSON data, add CSRF token to the body as well
+        if (options.method === 'POST' && options.headers['Content-Type'] === 'application/json' && options.body) {
+            try {
+                const data = JSON.parse(options.body);
+                data.csrf_token = window.getCSRFToken();
+                options.body = JSON.stringify(data);
+            } catch (e) {
+                // If body is not JSON, just continue with headers
+            }
+        }
+        
+        return fetch(url, options);
+    };
+    
+    // Setup global AJAX defaults for jQuery if it's available
+    if (window.$) {
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                // Add CSRF token to headers for all AJAX requests
+                xhr.setRequestHeader('X-CSRFToken', window.getCSRFToken());
+            }
+        });
+    }
     
     // Focus Management for Better Keyboard Navigation
     function initializeFocusManagement() {

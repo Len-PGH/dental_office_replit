@@ -400,7 +400,7 @@
                 sms_reminder: formData.get('sms_reminder') === 'on'
             };
             
-            const response = await fetch('/api/appointments', {
+            const response = await fetchWithCSRF('/api/appointments', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -470,7 +470,7 @@
                 bill_amount: formData.get('bill_amount'),
                 follow_up_date: followUpDate || null
             };
-            const response = await fetch('/api/treatments', {
+            const response = await fetchWithCSRF('/api/treatments', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -179,13 +179,10 @@ document.addEventListener('DOMContentLoaded', function() {
     submitBtn.disabled = true;
 
     try {
-      const response = await fetch('/api/appointments', {
+      const response = await fetchWithCSRF('/api/appointments', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          {% if csrf_token %}
-          'X-CSRFToken': '{{ csrf_token }}'
-          {% endif %}
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           service_id: document.getElementById('service').value,

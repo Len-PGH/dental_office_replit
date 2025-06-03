@@ -22,16 +22,6 @@ import uuid
 import threading
 
 app = Flask(__name__, static_folder=None)
-app.secret_key = os.urandom(24)
-
-# Configure MIME types
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-app.config['MIME_TYPES'] = {
-    '.css': 'text/css',
-    '.js': 'application/javascript',
-    '.min.css': 'text/css',
-    '.min.js': 'application/javascript'
-}
 
 # Load environment variables
 load_dotenv()
@@ -54,9 +44,19 @@ C2C_ADDRESS = os.getenv('C2C_ADDRESS')
 # Initialize SWAIG before any @swaig.endpoint decorators
 swaig = SWAIG(app, auth=(HTTP_USERNAME, HTTP_PASSWORD))
 
-# Configuration
+# Configuration - Use persistent SECRET_KEY from environment
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev')
+app.secret_key = app.config['SECRET_KEY']  # Set Flask's secret_key to the same persistent value
 app.config['ENABLE_CSRF'] = os.getenv('ENABLE_CSRF', 'false').lower() == 'true'
+
+# Configure MIME types
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['MIME_TYPES'] = {
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.min.css': 'text/css',
+    '.min.js': 'application/javascript'
+}
 
 # Setup logging
 def setup_logging():
@@ -218,7 +218,10 @@ def patient_dashboard():
         # Get next appointment (first upcoming appointment)
         next_appointment = db.execute('''
             SELECT a.*, s.name as service_name, 
-                   d.first_name || ' ' || d.last_name as dentist_name
+                   CASE 
+                       WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                       ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+                   END as dentist_name
         FROM appointments a
         JOIN dental_services s ON a.service_id = s.id
             JOIN dentists d ON a.dentist_id = d.id
@@ -231,7 +234,10 @@ def patient_dashboard():
         # Get recent treatments
         treatments = db.execute('''
             SELECT th.*, s.name as service_name, 
-                   d.first_name || ' ' || d.last_name as dentist_name
+                   CASE 
+                       WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                       ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+                   END as dentist_name
             FROM treatment_history th
             JOIN dental_services s ON th.service_id = s.id
             JOIN dentists d ON th.dentist_id = d.id
@@ -376,7 +382,10 @@ def patient_appointments():
         # Get all appointments
         appointments = db.execute('''
             SELECT a.*, s.name as service_name, 
-                   d.first_name || ' ' || d.last_name as dentist_name
+                   CASE 
+                       WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                       ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+                   END as dentist_name
             FROM appointments a
             JOIN dental_services s ON a.service_id = s.id
             JOIN dentists d ON a.dentist_id = d.id
@@ -1527,8 +1536,31 @@ def csrf_protect():
         if request.path == '/swaig':
             return None
             
+        # Skip CSRF protection for password reset endpoints
+        if request.path.startswith('/api/password/reset/'):
+            return None
+            
+        # Skip CSRF protection for first-run setup
+        if request.path == '/setup':
+            return None
+            
         if request.method == "POST":
+            # Check for CSRF token in form data first
             token = request.form.get('csrf_token')
+            
+            # If not found in form data, check headers
+            if not token:
+                token = request.headers.get('X-CSRFToken')
+            
+            # If still not found and request has JSON data, check there too
+            if not token and request.is_json:
+                try:
+                    data = request.get_json()
+                    if data:
+                        token = data.get('csrf_token')
+                except:
+                    pass
+            
             if not token or token != session.get('csrf_token'):
                 app.logger.warning(f'CSRF token validation failed. Expected: {session.get("csrf_token")}, Got: {token}')
                 abort(403)
@@ -1781,7 +1813,7 @@ def make_payment():
                     sms_body += "Bill is now fully paid."
                 
                 sms_body += f" Payment Ref: {secrets.token_hex(4).upper()}"
-                if payment_details_dict.get('reference_number'):
+                if payment_details_dict['reference_number']:
                     sms_body += f" | Bill Ref: {payment_details_dict['reference_number']}"
                 
                 mfa.client.messages.create(
@@ -2362,11 +2394,49 @@ def swaig_check_balance(challenge_token=None, meta_data_token=None, **kwargs):
         type="string",
         description="Challenge token",
         required=True
+    ),
+    service_name=SWAIGArgument(
+        type="string",
+        description="Filter by service name (e.g., 'cleaning', 'whitening', 'braces')",
+        required=False
+    ),
+    status=SWAIGArgument(
+        type="string", 
+        description="Filter by bill status (paid, pending, overdue, partial)",
+        required=False
+    ),
+    amount_min=SWAIGArgument(
+        type="number",
+        description="Minimum amount filter",
+        required=False
+    ),
+    amount_max=SWAIGArgument(
+        type="number", 
+        description="Maximum amount filter",
+        required=False
+    ),
+    due_date=SWAIGArgument(
+        type="string",
+        description="Filter by specific due date (YYYY-MM-DD format)",
+        required=False
+    ),
+    reference_number=SWAIGArgument(
+        type="string",
+        description="Filter by bill reference number (full or partial)",
+        required=False
     )
 )
-def swaig_get_bills(challenge_token=None, meta_data_token=None, **kwargs):
-    print(f"[SWAIG][CONSOLE] swaig_get_bills called with challenge_token={challenge_token}")
-    logging.info(f"[SWAIG] swaig_get_bills called with challenge_token={challenge_token}")
+def swaig_get_bills(challenge_token=None, service_name=None, status=None, amount_min=None, amount_max=None, due_date=None, reference_number=None, meta_data_token=None, **kwargs):
+    filter_desc = []
+    if service_name: filter_desc.append(f"service '{service_name}'")
+    if status: filter_desc.append(f"status '{status}'")
+    if amount_min or amount_max: filter_desc.append(f"amount ${amount_min or 0}-${amount_max or 999999}")
+    if due_date: filter_desc.append(f"due date '{due_date}'")
+    if reference_number: filter_desc.append(f"reference '{reference_number}'")
+    
+    filter_text = f" with filters: {', '.join(filter_desc)}" if filter_desc else ""
+    print(f"[SWAIG][CONSOLE] swaig_get_bills called{filter_text}")
+    logging.info(f"[SWAIG] swaig_get_bills called{filter_text}")
     
     # Check if user is authenticated via challenge token
     if not is_challenge_token_valid(challenge_token):
@@ -2393,28 +2463,184 @@ def swaig_get_bills(challenge_token=None, meta_data_token=None, **kwargs):
         return "Patient session data incomplete. Please verify your identity again.", {}
     
     db = get_db()
-    bills = db.execute('''
-        SELECT b.*, s.name as service_name
+    
+    # Build comprehensive SQL query to get all bill details including payment history
+    base_query = '''
+        SELECT b.*, 
+               s.name as service_name, s.description as service_description, s.price as service_price,
+               CASE 
+                   WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                   ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+               END as dentist_name,
+               th.diagnosis, th.treatment_notes, th.treatment_date,
+               (b.amount - COALESCE(b.insurance_coverage, 0)) as calculated_patient_portion
         FROM billing b
         JOIN dental_services s ON b.service_id = s.id
+        LEFT JOIN dentists d ON b.dentist_id = d.id
+        LEFT JOIN treatment_history th ON b.reference_number = th.reference_number
         WHERE b.patient_id = ?
-        ORDER BY b.due_date DESC
-    ''', (patient_internal_id,)).fetchall()
+    '''
     
-    print(f"[SWAIG][CONSOLE] Returning {len(bills)} bills for patient {patient_id}")
-    logging.info(f"[SWAIG] Returning {len(bills)} bills for patient {patient_id}")
+    conditions = []
+    params = [patient_internal_id]
     
-    if bills:
-        bills_summary = f"You have {len(bills)} bills on your account. "
-        pending_bills = [b for b in bills if b['status'] != 'paid']
+    # Service name filter (case insensitive, partial match)
+    if service_name:
+        conditions.append("UPPER(s.name) LIKE ? OR UPPER(s.description) LIKE ?")
+        service_search = f"%{service_name.upper()}%"
+        params.extend([service_search, service_search])
+    
+    # Status filter
+    if status:
+        status_lower = status.lower()
+        if status_lower in ['paid', 'pending', 'overdue', 'partial']:
+            if status_lower == 'paid':
+                conditions.append("b.status = 'paid'")
+            elif status_lower == 'overdue':
+                conditions.append("b.due_date < date('now') AND b.status != 'paid'")
+            elif status_lower == 'pending':
+                conditions.append("(b.status = 'pending' OR (b.status != 'paid' AND b.status != 'partial' AND b.due_date >= date('now')))")
+            elif status_lower == 'partial':
+                conditions.append("b.status = 'partial'")
+    
+    # Amount range filters (check both total amount and patient portion)
+    if amount_min is not None:
+        conditions.append("(b.amount >= ? OR b.patient_portion >= ?)")
+        params.extend([amount_min, amount_min])
+    
+    if amount_max is not None:
+        conditions.append("(b.amount <= ? OR b.patient_portion <= ?)")
+        params.extend([amount_max, amount_max])
+    
+    # Due date filter
+    if due_date:
+        conditions.append("b.due_date = ?")
+        params.append(due_date)
+    
+    # Reference number filter (flexible matching)
+    if reference_number:
+        ref_search = reference_number.strip().upper()
+        conditions.append("UPPER(b.reference_number) LIKE ?")
+        params.append(f'%{ref_search}%')
+    
+    # Add conditions to query
+    if conditions:
+        base_query += " AND " + " AND ".join(conditions)
+    
+    base_query += " ORDER BY b.due_date DESC"
+    
+    bills = db.execute(base_query, params).fetchall()
+    
+    # Get payment history for each bill
+    enhanced_bills = []
+    for bill in bills:
+        bill_dict = dict(bill)
+        
+        # Get payment history for this bill
+        payments = db.execute('''
+            SELECT payment_date, amount, payment_method_type, transaction_id
+            FROM payments
+            WHERE billing_id = ?
+            ORDER BY payment_date DESC
+        ''', (bill['id'],)).fetchall()
+        
+        # Calculate payment totals and remaining balance
+        total_paid = sum(float(p['amount']) for p in payments) if payments else 0
+        patient_portion = float(bill['patient_portion']) if bill['patient_portion'] else float(bill['calculated_patient_portion'])
+        remaining_balance = max(0, patient_portion - total_paid)
+        
+        # Add enhanced information to bill
+        bill_dict.update({
+            'payment_history': [dict(p) for p in payments],
+            'total_paid': total_paid,
+            'remaining_balance': remaining_balance,
+            'payment_count': len(payments),
+            'is_fully_paid': remaining_balance == 0,
+            'patient_portion_calculated': patient_portion
+        })
+        
+        enhanced_bills.append(bill_dict)
+    
+    print(f"[SWAIG][CONSOLE] Returning {len(enhanced_bills)} bills with full details for patient {patient_id}{filter_text}")
+    logging.info(f"[SWAIG] Returning {len(enhanced_bills)} bills with full details for patient {patient_id}{filter_text}")
+    
+    if enhanced_bills:
+        bills_summary = f"Found {len(enhanced_bills)} bill(s)"
+        if filter_desc:
+            bills_summary += f" matching {', '.join(filter_desc)}"
+        bills_summary += ". "
+        
+        pending_bills = [b for b in enhanced_bills if b['status'] != 'paid']
         if pending_bills:
-            total_due = sum(b['patient_portion'] for b in pending_bills)
-            bills_summary += f"Total amount due: ${total_due:.2f}."
+            total_due = sum(b['remaining_balance'] for b in pending_bills)
+            bills_summary += f"Total amount due: ${total_due:.2f}.\n\nDetailed Bill Information:\n"
+            
+            # Add comprehensive bill information
+            for i, bill in enumerate(enhanced_bills, 1):
+                status_text = f" ({bill['status'].title()})" if bill['status'] != 'pending' else ""
+                patient_portion = bill['patient_portion_calculated']
+                remaining = bill['remaining_balance']
+                
+                bills_summary += f"\n{i}. Bill #{bill['bill_number']} - {bill['service_name']}\n"
+                bills_summary += f"   Reference: {bill['reference_number']}\n"
+                bills_summary += f"   Total Amount: ${float(bill['amount']):.2f}\n"
+                bills_summary += f"   Insurance Coverage: ${float(bill['insurance_coverage'] or 0):.2f}\n"
+                bills_summary += f"   Patient Portion: ${patient_portion:.2f}\n"
+                bills_summary += f"   Amount Paid: ${bill['total_paid']:.2f}\n"
+                bills_summary += f"   Remaining Balance: ${remaining:.2f}{status_text}\n"
+                
+                if bill['dentist_name']:
+                    bills_summary += f"   Provider: {bill['dentist_name']}\n"
+                
+                if bill['service_description']:
+                    bills_summary += f"   Service Details: {bill['service_description']}\n"
+                
+                if bill['diagnosis']:
+                    bills_summary += f"   Diagnosis: {bill['diagnosis']}\n"
+                
+                if bill['due_date']:
+                    bills_summary += f"   Due Date: {bill['due_date']}\n"
+                
+                if bill['payment_history']:
+                    bills_summary += f"   Payment History: {bill['payment_count']} payment(s)\n"
+                    for payment in bill['payment_history'][:2]:  # Show last 2 payments
+                        bills_summary += f"     - ${float(payment['amount']):.2f} on {payment['payment_date']} via {payment['payment_method_type']}\n"
+                    if len(bill['payment_history']) > 2:
+                        bills_summary += f"     - ... and {len(bill['payment_history']) - 2} more payment(s)\n"
+                else:
+                    bills_summary += f"   Payment History: No payments yet\n"
+                
+                if bill['treatment_notes']:
+                    bills_summary += f"   Treatment Notes: {bill['treatment_notes']}\n"
         else:
-            bills_summary += "All bills are paid."
-        return bills_summary, {'bills': [dict(b) for b in bills], 'patient_id': patient_id}
+            bills_summary += "All matching bills are paid.\n\nDetailed Bill Information:\n"
+            for i, bill in enumerate(enhanced_bills, 1):
+                patient_portion = bill['patient_portion_calculated']
+                bills_summary += f"\n{i}. Bill #{bill['bill_number']} - {bill['service_name']}: ${patient_portion:.2f} (Paid)\n"
+                bills_summary += f"   Reference: {bill['reference_number']}\n"
+                bills_summary += f"   Total Paid: ${bill['total_paid']:.2f}\n"
+                if bill['payment_history']:
+                    bills_summary += f"   Last Payment: ${float(bill['payment_history'][0]['amount']):.2f} on {bill['payment_history'][0]['payment_date']}\n"
+        
+        return bills_summary, {
+            'bills': enhanced_bills, 
+            'patient_id': patient_id, 
+            'filters_applied': filter_desc,
+            'total_bills': len(enhanced_bills),
+            'total_amount_due': sum(b['remaining_balance'] for b in pending_bills) if pending_bills else 0,
+            'bills_with_payments': len([b for b in enhanced_bills if b['payment_count'] > 0])
+        }
     else:
-        return "You have no bills on your account.", {'bills': [], 'patient_id': patient_id}
+        no_results_msg = "No bills found"
+        if filter_desc:
+            no_results_msg += f" matching {', '.join(filter_desc)}"
+        no_results_msg += " on your account."
+        
+        # If filters were used but no results, suggest trying without filters
+        if filter_desc:
+            no_results_msg += " Try removing some filters to see more bills."
+            
+        return no_results_msg, {'bills': [], 'patient_id': patient_id, 'filters_applied': filter_desc}
 
 @swaig.endpoint(
     "Schedule Appointment",
@@ -2470,6 +2696,73 @@ def swaig_schedule_appointment(dentist_id=None, service_id=None, date=None, time
         print(f"[SWAIG][CONSOLE] Patient not found: {patient_id}")
         logging.warning(f"[SWAIG] Patient not found: {patient_id}")
         return "Patient account not found", {}
+    
+    # Smart service_id resolution - handle both numeric IDs and service names
+    resolved_service_id = None
+    if service_id.isdigit():
+        # It's a numeric ID, validate it exists
+        resolved_service_id = int(service_id)
+        service = db.execute('SELECT * FROM dental_services WHERE id = ?', (resolved_service_id,)).fetchone()
+        if not service:
+            return f"Service ID {service_id} not found", {}
+    else:
+        # It's a service name or type, try to resolve it
+        service = None
+        # First try exact name match (case insensitive)
+        service = db.execute('SELECT * FROM dental_services WHERE LOWER(name) = LOWER(?)', (service_id,)).fetchone()
+        if not service:
+            # Try type match (for common abbreviations like "cleaning", "whitening")
+            service = db.execute('SELECT * FROM dental_services WHERE LOWER(type) = LOWER(?)', (service_id,)).fetchone()
+        if not service:
+            # Try partial name match
+            service = db.execute('SELECT * FROM dental_services WHERE LOWER(name) LIKE LOWER(?)', (f'%{service_id}%',)).fetchone()
+        
+        if service:
+            resolved_service_id = service['id']
+            print(f"[SWAIG][CONSOLE] Resolved service '{service_id}' to '{service['name']}' (ID: {resolved_service_id})")
+            logging.info(f"[SWAIG] Resolved service '{service_id}' to '{service['name']}' (ID: {resolved_service_id})")
+        else:
+            return f"Service '{service_id}' not found. Available services include: Regular Cleaning, Teeth Whitening, Braces Consultation, Emergency Visit", {}
+    
+    # Smart dentist_id resolution and auto-assignment
+    resolved_dentist_id = None
+    if dentist_id.isdigit():
+        # It's a numeric ID, validate it exists
+        resolved_dentist_id = int(dentist_id)
+        dentist = db.execute('SELECT * FROM dentists WHERE id = ?', (resolved_dentist_id,)).fetchone()
+        if not dentist:
+            return f"Dentist ID {dentist_id} not found", {}
+    else:
+        # Try to resolve dentist by name
+        dentist = db.execute('''
+            SELECT * FROM dentists 
+            WHERE LOWER(first_name || ' ' || last_name) LIKE LOWER(?)
+        ''', (f'%{dentist_id}%',)).fetchone()
+        
+        if dentist:
+            resolved_dentist_id = dentist['id']
+            print(f"[SWAIG][CONSOLE] Resolved dentist '{dentist_id}' to Dr. {dentist['first_name']} {dentist['last_name']} (ID: {resolved_dentist_id})")
+            logging.info(f"[SWAIG] Resolved dentist '{dentist_id}' to Dr. {dentist['first_name']} {dentist['last_name']} (ID: {resolved_dentist_id})")
+        else:
+            # Auto-assign dentist based on service type (smart recommendations)
+            if resolved_service_id:
+                service = db.execute('SELECT * FROM dental_services WHERE id = ?', (resolved_service_id,)).fetchone()
+                if service['type'] == 'whitening':
+                    resolved_dentist_id = 2  # Dr. Sarah Johnson
+                elif service['type'] == 'orthodontics':
+                    resolved_dentist_id = 3  # Dr. Michael Chen  
+                else:
+                    resolved_dentist_id = 1  # Dr. John Smith (default)
+                
+                auto_dentist = db.execute('SELECT * FROM dentists WHERE id = ?', (resolved_dentist_id,)).fetchone()
+                print(f"[SWAIG][CONSOLE] Auto-assigned Dr. {auto_dentist['first_name']} {auto_dentist['last_name']} for {service['name']}")
+                logging.info(f"[SWAIG] Auto-assigned Dr. {auto_dentist['first_name']} {auto_dentist['last_name']} for {service['name']}")
+            else:
+                return f"Dentist '{dentist_id}' not found. Available dentists: Dr. John Smith, Dr. Sarah Johnson, Dr. Michael Chen", {}
+    
+    # Use resolved IDs
+    dentist_id = resolved_dentist_id
+    service_id = resolved_service_id
     
     # Convert time slot to actual times
     if time_slot == 'morning':
@@ -2601,6 +2894,12 @@ def swaig_reschedule_appointment(appointment_id=None, date=None, time_slot=None,
         logging.warning(f"[SWAIG] Appointment {appointment_id} does not belong to patient {patient_id}")
         return "You can only reschedule your own appointments", {}
     
+    # Check if the appointment is already cancelled
+    if appt['status'] == 'cancelled':
+        print(f"[SWAIG][CONSOLE] Cannot reschedule cancelled appointment: {appointment_id}")
+        logging.warning(f"[SWAIG] Cannot reschedule cancelled appointment: {appointment_id}")
+        return "Cannot reschedule a cancelled appointment. Please schedule a new appointment instead.", {}
+    
     # Convert time slot to actual times
     if time_slot == 'morning':
         start_time = f"{date}T08:00:00"
@@ -2722,6 +3021,12 @@ def swaig_cancel_appointment(appointment_id=None, challenge_token=None, meta_dat
         print(f"[SWAIG][CONSOLE] Appointment {appointment_id} does not belong to patient {patient_id}")
         logging.warning(f"[SWAIG] Appointment {appointment_id} does not belong to patient {patient_id}")
         return "You can only cancel your own appointments", {}
+    
+    # Check if the appointment is already cancelled
+    if appt['status'] == 'cancelled':
+        print(f"[SWAIG][CONSOLE] Appointment {appointment_id} is already cancelled")
+        logging.info(f"[SWAIG] Appointment {appointment_id} is already cancelled")
+        return "This appointment has already been cancelled.", {}
     
     try:
         db.execute('UPDATE appointments SET status = ? WHERE id = ?', ('cancelled', appointment_id))
@@ -2929,7 +3234,7 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
                     sms_body += "Bill is now fully paid."
                 
                 sms_body += f" Payment Ref: {payment_reference}"
-                if payment_details.get('reference_number'):
+                if payment_details['reference_number']:
                     sms_body += f" | Bill Ref: {payment_details['reference_number']}"
                 
                 mfa.client.messages.create(
@@ -3498,11 +3803,16 @@ def api_create_treatment():
         type="string",
         description="Challenge token",
         required=True
+    ),
+    service_type=SWAIGArgument(
+        type="string",
+        description="Optional service type to filter appointments (e.g., 'teeth whitening', 'cleaning', 'checkup', 'orthodontics')",
+        required=False
     )
 )
-def swaig_get_appointments(challenge_token=None, meta_data_token=None, **kwargs):
-    print(f"[SWAIG][CONSOLE] swaig_get_appointments called with challenge_token={challenge_token}")
-    logging.info(f"[SWAIG] swaig_get_appointments called with challenge_token={challenge_token}")
+def swaig_get_appointments(challenge_token=None, service_type=None, meta_data_token=None, **kwargs):
+    print(f"[SWAIG][CONSOLE] swaig_get_appointments called with challenge_token={challenge_token}, service_type={service_type}")
+    logging.info(f"[SWAIG] swaig_get_appointments called with challenge_token={challenge_token}, service_type={service_type}")
     
     # Check if user is authenticated via challenge token
     if not is_challenge_token_valid(challenge_token):
@@ -3526,18 +3836,60 @@ def swaig_get_appointments(challenge_token=None, meta_data_token=None, **kwargs)
         logging.warning(f"[SWAIG] Patient not found: {patient_id}")
         return "Patient account not found", {}
     
-    appointments = db.execute('''
-        SELECT a.*, s.name as service_name, 
-               d.first_name || ' ' || d.last_name as dentist_name
+    # Build query with optional service filtering
+    query = '''
+        SELECT a.*, s.name as service_name, s.type as service_type,
+               CASE 
+                   WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                   ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+               END as dentist_name
         FROM appointments a
         JOIN dental_services s ON a.service_id = s.id
         JOIN dentists d ON a.dentist_id = d.id
-        WHERE a.patient_id = ?
-        ORDER BY a.start_time ASC
-    ''', (patient['id'],)).fetchall()
+        WHERE a.patient_id = ? AND a.status != 'cancelled'
+    '''
     
-    print(f"[SWAIG][CONSOLE] Returning {len(appointments)} appointments for patient {patient_id}")
-    logging.info(f"[SWAIG] Returning {len(appointments)} appointments for patient {patient_id}")
+    params = [patient['id']]
+    
+    # Add service type filtering if provided
+    if service_type:
+        # Flexible matching: check service name, type, and partial matches
+        query += '''
+            AND (UPPER(s.name) LIKE ? OR 
+                 UPPER(s.type) LIKE ? OR 
+                 UPPER(s.name) LIKE ? OR 
+                 UPPER(s.description) LIKE ?)
+        '''
+        service_search = f"%{service_type.upper()}%"
+        # Handle common variations
+        if 'whitening' in service_type.lower():
+            service_variations = ['%TEETH%WHITENING%', '%WHITENING%', '%TEETH%WHITENING%', '%WHITENING%']
+        elif 'cleaning' in service_type.lower():
+            service_variations = ['%CLEANING%', '%CLEAN%', '%HYGIENE%', '%CLEANING%']
+        elif 'checkup' in service_type.lower():
+            service_variations = ['%CHECKUP%', '%CHECK%', '%EXAM%', '%CHECKUP%']
+        elif 'orthodont' in service_type.lower():
+            service_variations = ['%ORTHODONT%', '%BRACES%', '%ORTHODONT%', '%BRACES%']
+        else:
+            service_variations = [service_search, service_search, service_search, service_search]
+        
+        params.extend(service_variations)
+    
+    query += ' ORDER BY a.start_time ASC'
+    
+    appointments = db.execute(query, params).fetchall()
+    
+    # Also get count of cancelled appointments for informational purposes
+    cancelled_count = db.execute('''
+        SELECT COUNT(*) as count
+        FROM appointments
+        WHERE patient_id = ? AND status = 'cancelled'
+    ''', (patient['id'],)).fetchone()['count']
+    
+    print(f"[SWAIG][CONSOLE] Returning {len(appointments)} appointments for patient {patient_id}" + 
+          (f" (filtered by service_type: {service_type})" if service_type else ""))
+    logging.info(f"[SWAIG] Returning {len(appointments)} appointments for patient {patient_id}" + 
+                (f" (filtered by service_type: {service_type})" if service_type else ""))
     
     if appointments:
         from datetime import datetime
@@ -3565,51 +3917,118 @@ def swaig_get_appointments(challenge_token=None, meta_data_token=None, **kwargs)
                 # If parsing fails, assume it's in the future for safety
                 upcoming_appointments.append(appt_dict)
         
-        # Build detailed response
-        if upcoming_appointments:
-            next_appointment = upcoming_appointments[0]
-            
-            # Format next appointment details
-            try:
-                if 'T' in next_appointment['start_time']:
-                    next_appt_datetime = datetime.fromisoformat(next_appointment['start_time'].replace('T', ' '))
-                else:
-                    next_appt_datetime = datetime.strptime(next_appointment['start_time'], '%Y-%m-%d %H:%M:%S')
+        # Build detailed response based on filtering
+        if service_type:
+            # Filtered response - focus on the specific service
+            if upcoming_appointments:
+                response = f"You have {len(upcoming_appointments)} upcoming {service_type} appointment(s):"
                 
-                formatted_date = next_appt_datetime.strftime('%A, %B %d, %Y')
-                formatted_time = next_appt_datetime.strftime('%I:%M %p')
-            except:
-                formatted_date = next_appointment['start_time']
-                formatted_time = "Time TBD"
-            
-            response = f"Your next appointment is scheduled for {formatted_date} at {formatted_time}. "
-            response += f"It's a {next_appointment['service_name']} appointment with {next_appointment['dentist_name']}. "
-            response += f"(Appointment ID: {next_appointment['id']})"
-            
-            if next_appointment.get('notes'):
-                response += f" Notes: {next_appointment['notes']}"
-            
-            if len(upcoming_appointments) > 1:
-                response += f"\n\nYou have {len(upcoming_appointments)} total upcoming appointments"
-                if len(past_appointments) > 0:
-                    response += f" and {len(past_appointments)} past appointments."
-                else:
-                    response += "."
-            elif len(past_appointments) > 0:
-                response += f"\n\nYou also have {len(past_appointments)} past appointments."
+                for i, appt in enumerate(upcoming_appointments):
+                    try:
+                        if 'T' in appt['start_time']:
+                            appt_datetime = datetime.fromisoformat(appt['start_time'].replace('T', ' '))
+                        else:
+                            appt_datetime = datetime.strptime(appt['start_time'], '%Y-%m-%d %H:%M:%S')
+                        
+                        appt_date = appt_datetime.strftime('%A, %B %d, %Y')
+                        appt_time = appt_datetime.strftime('%I:%M %p')
+                    except:
+                        appt_date = appt['start_time']
+                        appt_time = "Time TBD"
+                    
+                    response += f"\n{i+1}. {appt_date} at {appt_time} - {appt['service_name']} with {appt['dentist_name']} (ID: {appt['id']})"
+                    if appt.get('notes'):
+                        response += f"\n   Notes: {appt['notes']}"
+                
+                if past_appointments:
+                    response += f"\n\nYou also have {len(past_appointments)} past {service_type} appointments."
+            else:
+                past_info = f" You have {len(past_appointments)} past {service_type} appointments." if past_appointments else ""
+                response = f"You have no upcoming {service_type} appointments scheduled.{past_info}"
         else:
-            response = f"You have no upcoming appointments scheduled. You have {len(past_appointments)} past appointments."
+            # Standard response - show all appointments
+            if upcoming_appointments:
+                next_appointment = upcoming_appointments[0]
+                
+                # Format next appointment details
+                try:
+                    if 'T' in next_appointment['start_time']:
+                        next_appt_datetime = datetime.fromisoformat(next_appointment['start_time'].replace('T', ' '))
+                    else:
+                        next_appt_datetime = datetime.strptime(next_appointment['start_time'], '%Y-%m-%d %H:%M:%S')
+                    
+                    formatted_date = next_appt_datetime.strftime('%A, %B %d, %Y')
+                    formatted_time = next_appt_datetime.strftime('%I:%M %p')
+                except:
+                    formatted_date = next_appointment['start_time']
+                    formatted_time = "Time TBD"
+                
+                response = f"Your next appointment is scheduled for {formatted_date} at {formatted_time}. "
+                response += f"It's a {next_appointment['service_name']} appointment with {next_appointment['dentist_name']}. "
+                response += f"(Appointment ID: {next_appointment['id']})"
+                
+                if next_appointment.get('notes'):
+                    response += f" Notes: {next_appointment['notes']}"
+                
+                # If there are multiple upcoming appointments, list them all
+                if len(upcoming_appointments) > 1:
+                    response += f"\n\nYou have {len(upcoming_appointments)} total upcoming appointments:"
+                    
+                    for i, appt in enumerate(upcoming_appointments):
+                        try:
+                            if 'T' in appt['start_time']:
+                                appt_datetime = datetime.fromisoformat(appt['start_time'].replace('T', ' '))
+                            else:
+                                appt_datetime = datetime.strptime(appt['start_time'], '%Y-%m-%d %H:%M:%S')
+                            
+                            appt_date = appt_datetime.strftime('%A, %B %d, %Y')
+                            appt_time = appt_datetime.strftime('%I:%M %p')
+                        except:
+                            appt_date = appt['start_time']
+                            appt_time = "Time TBD"
+                        
+                        response += f"\n{i+1}. {appt_date} at {appt_time} - {appt['service_name']} with {appt['dentist_name']} (ID: {appt['id']})"
+                    
+                    if len(past_appointments) > 0:
+                        response += f"\n\nYou also have {len(past_appointments)} past appointments."
+                    
+                    if cancelled_count > 0:
+                        response += f" ({cancelled_count} cancelled appointments not shown)"
+                elif len(past_appointments) > 0:
+                    response += f"\n\nYou also have {len(past_appointments)} past appointments."
+                    if cancelled_count > 0:
+                        response += f" ({cancelled_count} cancelled appointments not shown)"
+            else:
+                response = f"You have no upcoming appointments scheduled. You have {len(past_appointments)} past appointments."
+                if cancelled_count > 0:
+                    response += f" ({cancelled_count} cancelled appointments not shown)"
         
         return response, {
             'appointments': [dict(a) for a in appointments], 
             'patient_id': patient_id,
+            'service_type_filter': service_type,
             'total_count': len(appointments),
             'upcoming_count': len(upcoming_appointments),
             'past_count': len(past_appointments),
+            'cancelled_count': cancelled_count,
             'next_appointment': upcoming_appointments[0] if upcoming_appointments else None
         }
     else:
-        return "You have no appointments scheduled.", {'appointments': [], 'patient_id': patient_id}
+        if service_type:
+            cancelled_info = f" ({cancelled_count} cancelled appointments not shown)" if cancelled_count > 0 else ""
+            return f"You have no {service_type} appointments scheduled.{cancelled_info}", {
+                'appointments': [], 
+                'patient_id': patient_id,
+                'service_type_filter': service_type,
+                'cancelled_count': cancelled_count
+            }
+        else:
+            cancelled_info = f" ({cancelled_count} cancelled appointments not shown)" if cancelled_count > 0 else ""
+            return f"You have no appointments scheduled.{cancelled_info}", {
+                'appointments': [], 
+                'patient_id': patient_id,
+                'cancelled_count': cancelled_count
+            }
 
 @swaig.endpoint(
     "Get Payment Methods",
@@ -3716,7 +4135,10 @@ def swaig_get_appointment_details(appointment_id=None, challenge_token=None, met
     appointment = db.execute('''
         SELECT a.*, 
                s.name as service_name, s.description as service_description, s.price as service_price,
-               d.first_name || ' ' || d.last_name as dentist_name,
+               CASE 
+                   WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                   ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+               END as dentist_name,
                d.specialization as dentist_specialization,
                p.patient_id as patient_external_id
         FROM appointments a
@@ -3736,6 +4158,17 @@ def swaig_get_appointment_details(appointment_id=None, challenge_token=None, met
         print(f"[SWAIG][CONSOLE] Appointment {appointment_id} does not belong to patient {patient_id}")
         logging.warning(f"[SWAIG] Appointment {appointment_id} does not belong to patient {patient_id}")
         return "You can only view details of your own appointments", {}
+    
+    # Check if the appointment is cancelled
+    if appointment['status'] == 'cancelled':
+        print(f"[SWAIG][CONSOLE] Appointment {appointment_id} is cancelled")
+        logging.info(f"[SWAIG] Appointment {appointment_id} is cancelled")
+        return f"Appointment #{appointment_id} has been cancelled and is no longer active. Please schedule a new appointment if needed.", {
+            'appointment': dict(appointment),
+            'patient_id': patient_id,
+            'appointment_id': appointment_id,
+            'status': 'cancelled'
+        }
     
     # Format the appointment details
     appt_dict = dict(appointment)
@@ -3839,7 +4272,10 @@ def swaig_get_bill_details(bill_id=None, challenge_token=None, meta_data_token=N
             SELECT b.*, 
                    s.name as service_name, s.description as service_description, s.price as service_price,
                    th.diagnosis, th.treatment_notes, th.treatment_date,
-                   d.first_name || ' ' || d.last_name as dentist_name
+                   CASE 
+                       WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                       ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+                   END as dentist_name
             FROM billing b
             JOIN dental_services s ON b.service_id = s.id
             LEFT JOIN treatment_history th ON b.reference_number = th.reference_number
@@ -3853,7 +4289,10 @@ def swaig_get_bill_details(bill_id=None, challenge_token=None, meta_data_token=N
             SELECT b.*, 
                    s.name as service_name, s.description as service_description, s.price as service_price,
                    th.diagnosis, th.treatment_notes, th.treatment_date,
-                   d.first_name || ' ' || d.last_name as dentist_name
+                   CASE 
+                       WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                       ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+                   END as dentist_name
             FROM billing b
             JOIN dental_services s ON b.service_id = s.id
             LEFT JOIN treatment_history th ON b.reference_number = th.reference_number
@@ -4033,7 +4472,10 @@ def swaig_verify_bill_reference(reference_number=None, service_name=None, status
     base_query = '''
         SELECT b.*, 
                s.name as service_name, s.description as service_description,
-               d.first_name || ' ' || d.last_name as dentist_name,
+               CASE 
+                   WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                   ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+               END as dentist_name,
                (b.amount - COALESCE(b.insurance_coverage, 0)) as patient_portion,
                CASE 
                    WHEN b.status = 'paid' THEN 'Paid'
@@ -4192,8 +4634,8 @@ def swaig_verify_bill_reference(reference_number=None, service_name=None, status
             if bill['display_status'] != 'Paid':
                 pending_amount += amount
             
-            bills_summary += f"\n{i}. Bill #{bill['id']} - {bill['service_name']}"
-            bills_summary += f"\n   Date: {created_date} | Due: {due_date_display}"
+            bills_summary += f"\n{i}. Bill #{bill['id']} - {bill['service_name']}\n"
+            bills_summary += f"   Date: {created_date} | Due: {due_date_display}"
             bills_summary += f"\n   Amount: ${amount:.2f} | Status: {bill['display_status']}"
             bills_summary += f"\n   Reference: {bill['reference_number']}"
             if bill['dentist_name']:
@@ -4763,6 +5205,66 @@ def schedule_cleanup_job():
     cleanup_thread.daemon = True
     cleanup_thread.start()
     app.logger.info("Scheduled temp file cleanup job")
+
+@swaig.endpoint(
+    "Get Available Services and Dentists",
+    challenge_token=SWAIGArgument(
+        type="string",
+        description="Challenge token",
+        required=True
+    )
+)
+def swaig_get_services_and_dentists(challenge_token=None, meta_data_token=None, **kwargs):
+    print(f"[SWAIG][CONSOLE] swaig_get_services_and_dentists called")
+    logging.info(f"[SWAIG] swaig_get_services_and_dentists called")
+    
+    # Check if user is authenticated via challenge token
+    if not is_challenge_token_valid(challenge_token):
+        print("[SWAIG][CONSOLE] Invalid or missing challenge token")
+        logging.warning("[SWAIG] Invalid or missing challenge token")
+        return "Please verify your identity first by providing the 6-digit code sent to your phone.", {}
+    
+    db = get_db()
+    
+    try:
+        # Get all dentists
+        dentists = db.execute('SELECT id, first_name, last_name FROM dentists ORDER BY id').fetchall()
+        
+        # Get all services
+        services = db.execute('SELECT id, name, type FROM dental_services ORDER BY id').fetchall()
+        
+        # Build response
+        response = "Available dental services and dentists:\n\n"
+        
+        # List services
+        response += "**Available Services:**\n"
+        for service in services:
+            response += f"- {service['name']} (Service ID: {service['id']}, Type: {service['type']})\n"
+        
+        response += "\n**Available Dentists:**\n"
+        for dentist in dentists:
+            response += f"- Dr. {dentist['first_name']} {dentist['last_name']} (Dentist ID: {dentist['id']})\n"
+        
+        response += "\n**Common Service Recommendations:**\n"
+        response += "- Regular Cleaning (ID: 1) → Dr. John Smith (ID: 1)\n"
+        response += "- Teeth Whitening (ID: 5) → Dr. Sarah Johnson (ID: 2)\n"
+        response += "- Braces Consultation (ID: 11) → Dr. Michael Chen (ID: 3)\n"
+        response += "- Emergency Visit (ID: 12) → Any available dentist\n"
+        
+        response += "\nTo schedule an appointment, provide the Service ID and Dentist ID."
+        
+        print(f"[SWAIG][CONSOLE] Successfully retrieved services and dentists")
+        logging.info(f"[SWAIG] Successfully retrieved services and dentists")
+        
+        return response, {
+            'services': [dict(s) for s in services],
+            'dentists': [dict(d) for d in dentists]
+        }
+        
+    except Exception as e:
+        print(f"[SWAIG][CONSOLE] Error retrieving services and dentists: {e}")
+        logging.error(f"[SWAIG] Error retrieving services and dentists: {e}")
+        return f"Error retrieving services and dentists: {str(e)}", {}
 
 if __name__ == '__main__':
     setup_logging()

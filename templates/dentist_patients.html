@@ -197,7 +197,7 @@
         const formData = new FormData(form);
         
         try {
-            const response = await fetch('/api/patients', {
+            const response = await fetchWithCSRF('/api/patients', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -250,7 +250,7 @@
         const patientId = formData.get('id');
         
         try {
-            const response = await fetch(`/api/patients/${patientId}`, {
+            const response = await fetchWithCSRF(`/api/patients/${patientId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -292,7 +292,7 @@
             return;
         }
         
-        fetch(`/api/patients/${patientId}/password`, {
+        fetchWithCSRF(`/api/patients/${patientId}/password`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'

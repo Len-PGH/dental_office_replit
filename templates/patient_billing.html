@@ -505,7 +505,7 @@ async function submitPayment() {
   }
   
   try {
-    const response = await fetch('/api/make-payment', {
+    const response = await fetchWithCSRF('/api/make-payment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -549,7 +549,7 @@ async function submitPaymentMethod() {
   }
   
   try {
-    const response = await fetch('/api/add-payment-method', {
+    const response = await fetchWithCSRF('/api/add-payment-method', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -577,7 +577,7 @@ async function removePaymentMethod(methodId) {
   }
   
   try {
-    const response = await fetch('/api/remove-payment-method', {
+    const response = await fetchWithCSRF('/api/remove-payment-method', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -754,7 +754,7 @@ async function sendBillSms(billId, billData) {
     smsBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Sending...';
     smsBtn.disabled = true;
     
-    const response = await fetch('/api/send-bill-sms', {
+    const response = await fetchWithCSRF('/api/send-bill-sms', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -807,7 +807,7 @@ async function sendBillMms(billId, billData) {
     mmsBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Generating...';
     mmsBtn.disabled = true;
     
-    const response = await fetch('/api/send-bill-mms', {
+    const response = await fetchWithCSRF('/api/send-bill-mms', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

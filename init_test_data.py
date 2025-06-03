@@ -260,6 +260,10 @@ def init_test_data():
         (2, 1, 3, (now).strftime('%Y-%m-%d'),
          'Cavity filling', 'Composite filling placed in upper right molar',
          (now + timedelta(days=180)).strftime('%Y-%m-%d'), 'TH_FUTURE_001', 180.00),
+        # Jim Smith's braces consultation treatment
+        (2, 2, 11, (now - timedelta(days=5)).strftime('%Y-%m-%d'),
+         'Braces consultation', 'Comprehensive orthodontic evaluation. Treatment plan developed.',
+         (now + timedelta(days=30)).strftime('%Y-%m-%d'), 'REF-1748809864233-356', 500.00),
          
         # Maria Garcia's treatments
         (3, 2, 5, (now - timedelta(days=45)).strftime('%Y-%m-%d'),
@@ -317,6 +321,10 @@ def init_test_data():
         (2, 1, None, 3, 180.00, 120.00, 60.00, 'pending', 
          (now + timedelta(days=30)).strftime('%Y-%m-%d'), 'TH_FUTURE_001', 
          (now).strftime('%Y-%m-%d'), None, generate_unique_bill_number()),
+        # Braces consultation bill for Jim Smith (Patient ID 8675309) - matches enhanced testing
+        (2, 2, 13, 11, 500.00, 200.00, 300.00, 'partial', 
+         (now + timedelta(days=15)).strftime('%Y-%m-%d'), 'REF-1748809864233-356', 
+         (now - timedelta(days=5)).strftime('%Y-%m-%d'), None, generate_unique_bill_number()),
          
         # Maria Garcia's bills
         (3, 2, 9, 5, 350.00, 0.00, 0.00, 'paid', 
@@ -364,6 +372,9 @@ def init_test_data():
         (3, 2, 70.00, (now - timedelta(days=25)).strftime('%Y-%m-%d %H:%M:%S'), 4, 'credit_card', 'completed', 'TXN100003', 'Partial payment for checkup'),
         (4, 2, 100.00, (now - timedelta(days=55)).strftime('%Y-%m-%d %H:%M:%S'), 4, 'credit_card', 'completed', 'TXN100004', 'Paid patient portion for deep cleaning'),
         (8, 4, 150.00, (now - timedelta(days=5)).strftime('%Y-%m-%d %H:%M:%S'), 4, 'banking', 'completed', 'TXN100005', 'Partial payment for root canal'),
+        # Braces consultation payments for Jim Smith (to match enhanced testing)
+        (13, 2, 100.00, (now - timedelta(days=3)).strftime('%Y-%m-%d %H:%M:%S'), 4, 'credit_card', 'completed', 'TXN100010', 'First payment for braces consultation'),
+        (13, 2, 50.00, (now - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'), 5, 'bank_transfer', 'completed', 'TXN100011', 'Second payment for braces consultation'),
         
         # Maria Garcia's payments
         (6, 3, 350.00, (now - timedelta(days=40)).strftime('%Y-%m-%d %H:%M:%S'), 6, 'credit_card', 'completed', 'TXN100006', 'Full payment for teeth whitening'),

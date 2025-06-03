@@ -201,7 +201,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         try {
-            const response = await fetch('/api/password/change', {
+            const response = await fetchWithCSRF('/api/password/change', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -228,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Test SMS handler
     document.getElementById('sendTestSMS').addEventListener('click', async function() {
         try {
-            const response = await fetch('/api/test-sms', {
+            const response = await fetchWithCSRF('/api/test-sms', {
                 method: 'POST'
             });
             const data = await response.json();
@@ -246,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Test MFA handler
     document.getElementById('sendTestMFA').addEventListener('click', async function() {
         try {
-            const response = await fetch('/api/test-mfa', {
+            const response = await fetchWithCSRF('/api/test-mfa', {
                 method: 'POST'
             });
             const data = await response.json();
@@ -266,7 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('mfaForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         try {
-            const response = await fetch('/api/verify-mfa', {
+            const response = await fetchWithCSRF('/api/verify-mfa', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
