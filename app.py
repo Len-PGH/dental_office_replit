@@ -8,7 +8,7 @@ import hashlib
 import secrets
 from functools import wraps
 import logging
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from werkzeug.security import generate_password_hash, check_password_hash
 from signalwire_swaig.swaig import SWAIG, SWAIGArgument, SWAIGFunctionProperties
 from signalwire_swaig.response import SWAIGResponse
@@ -75,11 +75,13 @@ def setup_logging():
     if not os.path.exists('logs'):
         os.makedirs('logs')
     
-    # Create a rotating file handler with a larger maxBytes and more backup files
-    file_handler = RotatingFileHandler(
+    # Create a rotating file handler - use timed rotation for better Windows compatibility
+    # This rotates daily instead of by size to avoid file locking issues
+    file_handler = TimedRotatingFileHandler(
         'logs/dental_office.log',
-        maxBytes=1024 * 1024,  # 1MB
-        backupCount=5,
+        when='midnight',  # Rotate at midnight
+        interval=1,  # Every 1 day
+        backupCount=7,  # Keep 7 days of logs
         delay=True,  # Delay file creation until first write
         encoding='utf-8'
     )
@@ -2639,7 +2641,9 @@ def swaig_get_bills(challenge_token=None, service_name=None, status=None, amount
         pending_bills = [b for b in enhanced_bills if b['status'] != 'paid']
         if pending_bills:
             total_due = sum(b['remaining_balance'] for b in pending_bills)
-            bills_summary += f"Total amount due: ${total_due:.2f}.\n\nDetailed Bill Information:\n"
+            bills_summary += f"Total amount due: ${total_due:.2f}.\n"
+            
+            bills_summary += f"\nDetailed Bill Information:\n"
             
             # Add comprehensive bill information
             for i, bill in enumerate(enhanced_bills, 1):
@@ -3146,7 +3150,7 @@ def swaig_cancel_appointment(appointment_id=None, challenge_token=None, meta_dat
         return f"Failed to cancel appointment: {str(e)}", {}
 
 @swaig.endpoint(
-    "Make Payment",
+    "Make Payment (Full or Partial)",
     bill_id=SWAIGArgument(
         type="string",
         description="Bill ID or Reference Number",
@@ -3154,7 +3158,7 @@ def swaig_cancel_appointment(appointment_id=None, challenge_token=None, meta_dat
     ),
     amount=SWAIGArgument(
         type="number",
-        description="Payment amount",
+        description="Payment amount (minimum $5.00). You can make partial payments - you don't need to pay the full balance at once.",
         required=True
     ),
     payment_method_id=SWAIGArgument(
@@ -3213,7 +3217,7 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
         
         # First try to find bill by ID (numeric)
         if bill_id.isdigit():
-            bill_lookup = db.execute('SELECT id, patient_portion, status, reference_number FROM billing WHERE id = ? AND patient_id = ?', (bill_id, patient['id'])).fetchone()
+            bill_lookup = db.execute('SELECT id, patient_portion, status, reference_number FROM billing WHERE id = ? AND patient_id = ?', (bill_id, patient['patient_id'])).fetchone()
             if bill_lookup:
                 actual_bill_id = bill_id
                 print(f"[SWAIG][CONSOLE] Found bill by ID: {actual_bill_id}")
@@ -3223,7 +3227,7 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
         # If not found by ID or not numeric, try as reference number
         if not actual_bill_id:
             # Try exact reference number match first
-            bill_lookup = db.execute('SELECT id, patient_portion, status, reference_number FROM billing WHERE reference_number = ? AND patient_id = ?', (bill_id, patient['id'])).fetchone()
+            bill_lookup = db.execute('SELECT id, patient_portion, status, reference_number FROM billing WHERE reference_number = ? AND patient_id = ?', (bill_id, patient['patient_id'])).fetchone()
             if bill_lookup:
                 actual_bill_id = str(bill_lookup['id'])
                 is_reference_number = True
@@ -3240,7 +3244,7 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
                         UPPER(reference_number) LIKE ? OR
                         UPPER(REPLACE(reference_number, '_', '')) LIKE ?
                     )
-                ''', (patient['id'], ref_search, ref_search[-8:] if len(ref_search) >= 8 else ref_search, f'%{ref_search}%', f'%{ref_search}%')).fetchone()
+                ''', (patient['patient_id'], ref_search, ref_search[-8:] if len(ref_search) >= 8 else ref_search, f'%{ref_search}%', f'%{ref_search}%')).fetchone()
                 
                 if bill_lookup:
                     actual_bill_id = str(bill_lookup['id'])
@@ -3253,7 +3257,7 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
             return f"No bill found with {'reference number' if not bill_id.isdigit() else 'ID or reference number'} '{bill_id}' for your account", {}
         
         # Verify payment method belongs to this patient
-        method = db.execute('SELECT method_type FROM payment_methods WHERE id = ? AND patient_id = ?', (payment_method_id, patient['id'])).fetchone()
+        method = db.execute('SELECT method_type FROM payment_methods WHERE id = ? AND patient_id = ?', (payment_method_id, patient['patient_id'])).fetchone()
         if not method:
             print(f"[SWAIG][CONSOLE] Invalid payment method {payment_method_id} for patient {patient_id}")
             logging.warning(f"[SWAIG] Invalid payment method {payment_method_id} for patient {patient_id}")
@@ -3282,7 +3286,7 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
         db.execute('''
             INSERT INTO payments (billing_id, patient_id, amount, payment_date, payment_method_id, payment_method_type, status, transaction_id, notes)
             VALUES (?, ?, ?, datetime('now'), ?, ?, 'completed', ?, ?)
-        ''', (actual_bill_id, patient['id'], amount, payment_method_id, payment_method_type, payment_reference, ''))
+        ''', (actual_bill_id, patient['patient_id'], amount, payment_method_id, payment_method_type, payment_reference, ''))
         db.commit()
         
         # Update billing record
