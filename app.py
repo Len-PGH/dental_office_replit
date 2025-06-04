@@ -4418,7 +4418,7 @@ def swaig_get_bill_details(bill_id=None, challenge_token=None, meta_data_token=N
     
     # Create detailed response
     details = f"Bill Verified - Reference #{bill['reference_number']}:\n"
-    details += f"Bill #: {bill.get('bill_number', bill['id'])}\n"
+    details += f"Bill #: {bill['bill_number'] if 'bill_number' in bill else bill['id']}\n"
     details += f"Service: {bill['service_name']}"
     if bill['service_description']:
         details += f" - {bill['service_description']}"
@@ -4773,7 +4773,7 @@ def swaig_verify_bill_reference(reference_number=None, service_name=None, status
     
     # Create detailed response
     details = f"Bill Verified - Reference #{bill['reference_number']}:\n"
-    details += f"Bill #: {bill.get('bill_number', bill['id'])}\n"
+    details += f"Bill #: {bill['bill_number'] if 'bill_number' in bill else bill['id']}\n"
     details += f"Service: {bill['service_name']}"
     if bill['service_description']:
         details += f" - {bill['service_description']}"
