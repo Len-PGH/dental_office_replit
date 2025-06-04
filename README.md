@@ -1,4 +1,7 @@
-# 🦷 SignalWire Dental Office Management System
+# SignalWire Dental Office System
+
+![image](https://github.com/user-attachments/assets/94353f89-0e3b-4a30-9516-c761bf5b68db)
+
 
 A comprehensive web-based dental office management system powered by **SignalWire** for voice, Click To Call, SMS, and MMS communications.
 
