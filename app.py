@@ -458,9 +458,17 @@ def patient_billing():
 
     # Fetch all bills for the patient
     bills = db.execute('''
-        SELECT b.*, s.name as service_name, th.diagnosis, th.treatment_notes, th.treatment_date
+        SELECT b.*, 
+               s.name as service_name, s.description as service_description, s.price as service_price,
+               CASE 
+                   WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                   ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+               END as dentist_name,
+               th.diagnosis, th.treatment_notes, th.treatment_date,
+               (b.amount - COALESCE(b.insurance_coverage, 0)) as calculated_patient_portion
         FROM billing b
         JOIN dental_services s ON b.service_id = s.id
+        LEFT JOIN dentists d ON b.dentist_id = d.id
         LEFT JOIN treatment_history th ON b.reference_number = th.reference_number
         WHERE b.patient_id = ?
         ORDER BY b.due_date DESC
@@ -2575,7 +2583,19 @@ def swaig_get_bills(challenge_token=None, service_name=None, status=None, amount
     
     base_query += " ORDER BY b.due_date DESC"
     
+    # DEBUG: Log the exact query and parameters being used
+    print(f"[SWAIG][DEBUG] Query: {base_query}")
+    print(f"[SWAIG][DEBUG] Params: {params}")
+    logging.info(f"[SWAIG][DEBUG] Query: {base_query}")
+    logging.info(f"[SWAIG][DEBUG] Params: {params}")
+    
     bills = db.execute(base_query, params).fetchall()
+    
+    # DEBUG: Log what bills were actually returned
+    print(f"[SWAIG][DEBUG] Raw bills returned: {len(bills)}")
+    for bill in bills:
+        print(f"[SWAIG][DEBUG] Bill ID: {bill['id']}, Patient ID: {bill['patient_id']}, Bill #: {bill['bill_number']}")
+    logging.info(f"[SWAIG][DEBUG] Raw bills returned: {len(bills)}")
     
     # Get payment history for each bill
     enhanced_bills = []
@@ -4874,13 +4894,13 @@ def send_bill_sms():
     remaining_balance = patient_portion - amount_paid
     
     # Create concise SMS message (SMS has 160 char limit, so keep it brief)
-    sms_message = f"""🏥 DENTAL OFFICE BILL #{bill['id']}
+    sms_message = f"""🏥 DENTAL OFFICE BILL #{bill['bill_number']}
 📋 Service: {bill['service_name']}
 💰 Amount Due: ${bill['patient_portion']:.2f}
 📅 Due Date: {bill['due_date'][:10] if bill['due_date'] else 'N/A'}
 🏥 Reference: {bill['reference_number'] or 'N/A'}
 
-💳 Pay online or call our office to make a payment.
+💳 Pay online at {PROJECT_URL} or call {SIGNALWIRE_PHONE_NUMBER}
 Thank you for choosing our dental practice!"""
     
     try:
