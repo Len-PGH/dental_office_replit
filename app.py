@@ -24,7 +24,19 @@ import threading
 app = Flask(__name__, static_folder=None)
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)
+
+# Debug CSRF environment variable loading
+import sys
+csrf_raw = os.getenv('ENABLE_CSRF')
+csrf_default = os.getenv('ENABLE_CSRF', 'false')
+csrf_lower = csrf_default.lower()
+csrf_result = csrf_lower == 'true'
+print(f"[DEBUG] CSRF Raw value: {repr(csrf_raw)}", file=sys.stderr)
+print(f"[DEBUG] CSRF Default: {repr(csrf_default)}", file=sys.stderr)
+print(f"[DEBUG] CSRF Lower: {repr(csrf_lower)}", file=sys.stderr)
+print(f"[DEBUG] CSRF Result: {csrf_result}", file=sys.stderr)
+
 SIGNALWIRE_PROJECT_ID = os.getenv('SIGNALWIRE_PROJECT_ID')
 SIGNALWIRE_TOKEN = os.getenv('SIGNALWIRE_TOKEN')
 SIGNALWIRE_AUTH_TOKEN = os.getenv('SIGNALWIRE_TOKEN')  # Same as SIGNALWIRE_TOKEN for consistency
@@ -87,6 +99,14 @@ def setup_logging():
     app.logger.addHandler(file_handler)
     app.logger.setLevel(logging.INFO)
     app.logger.info('SignalWire Dental Office Management System startup')
+    
+    # Log CSRF protection status
+    csrf_enabled = app.config.get('ENABLE_CSRF', False)
+    if csrf_enabled:
+        app.logger.info('CSRF Protection: ENABLED - All POST requests will be validated for CSRF tokens')
+    else:
+        app.logger.info('CSRF Protection: DISABLED - No CSRF token validation will occur')
+    app.logger.info(f'CSRF Configuration: ENABLE_CSRF={csrf_enabled}')
 
 def get_db():
     if 'db' not in g:
@@ -1531,26 +1551,36 @@ def billing():
 
 # CSRF Protection
 def csrf_protect():
-    if app.config['ENABLE_CSRF']:
+    csrf_enabled = app.config['ENABLE_CSRF']
+    app.logger.debug(f'[CSRF] Protection check - CSRF enabled: {csrf_enabled}, Path: {request.path}, Method: {request.method}')
+    
+    if csrf_enabled:
         # Skip CSRF protection for SWAIG endpoints
         if request.path == '/swaig':
+            app.logger.debug('[CSRF] Skipping CSRF protection for SWAIG endpoint')
             return None
             
         # Skip CSRF protection for password reset endpoints
         if request.path.startswith('/api/password/reset/'):
+            app.logger.debug('[CSRF] Skipping CSRF protection for password reset endpoint')
             return None
             
         # Skip CSRF protection for first-run setup
         if request.path == '/setup':
+            app.logger.debug('[CSRF] Skipping CSRF protection for setup endpoint')
             return None
             
         if request.method == "POST":
+            app.logger.info(f'[CSRF] Validating POST request to {request.path}')
+            
             # Check for CSRF token in form data first
             token = request.form.get('csrf_token')
+            token_source = 'form data'
             
             # If not found in form data, check headers
             if not token:
                 token = request.headers.get('X-CSRFToken')
+                token_source = 'headers'
             
             # If still not found and request has JSON data, check there too
             if not token and request.is_json:
@@ -1558,20 +1588,36 @@ def csrf_protect():
                     data = request.get_json()
                     if data:
                         token = data.get('csrf_token')
+                        token_source = 'JSON data'
                 except:
                     pass
             
-            if not token or token != session.get('csrf_token'):
-                app.logger.warning(f'CSRF token validation failed. Expected: {session.get("csrf_token")}, Got: {token}')
+            session_token = session.get('csrf_token')
+            
+            app.logger.info(f'[CSRF] Token from {token_source}: {token[:8] + "..." if token and len(token) > 8 else token}')
+            app.logger.info(f'[CSRF] Session token: {session_token[:8] + "..." if session_token and len(session_token) > 8 else session_token}')
+            
+            if not token or token != session_token:
+                app.logger.warning(f'[CSRF] VALIDATION FAILED - Expected: {session_token}, Got: {token}, Source: {token_source}')
                 abort(403)
+            else:
+                app.logger.info(f'[CSRF] VALIDATION SUCCESSFUL - Token matched from {token_source}')
+    else:
+        app.logger.debug('[CSRF] Protection disabled - skipping validation')
     return None
 
 @app.before_request
 def before_request():
     if app.config['ENABLE_CSRF']:
         if 'csrf_token' not in session:
-            session['csrf_token'] = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+            new_token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+            session['csrf_token'] = new_token
+            app.logger.info(f'[CSRF] Generated new CSRF token: {new_token[:8]}...')
+        else:
+            app.logger.debug(f'[CSRF] Using existing CSRF token: {session["csrf_token"][:8]}...')
         csrf_protect()
+    else:
+        app.logger.debug('[CSRF] CSRF protection disabled - skipping before_request checks')
 
 @app.context_processor
 def inject_csrf_token():
@@ -3112,6 +3158,18 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
         logging.warning("[SWAIG] Invalid or missing challenge token")
         return "Please verify your identity first by providing the 6-digit code sent to your phone.", {}
     
+    # Validate minimum payment amount
+    try:
+        payment_amount = float(amount)
+        if payment_amount < 5.00:
+            print(f"[SWAIG][CONSOLE] Payment amount ${payment_amount:.2f} is below minimum of $5.00")
+            logging.warning(f"[SWAIG] Payment amount ${payment_amount:.2f} is below minimum of $5.00")
+            return "The minimum payment amount is $5.00. Please enter a payment amount of at least $5.00.", {}
+    except (ValueError, TypeError):
+        print(f"[SWAIG][CONSOLE] Invalid payment amount: {amount}")
+        logging.warning(f"[SWAIG] Invalid payment amount: {amount}")
+        return "Invalid payment amount. Please enter a valid dollar amount.", {}
+    
     # Get verified patient data using challenge token
     patient_data = get_patient_by_challenge_token(challenge_token)
     patient_id = patient_data.get('patient_id')
@@ -3184,6 +3242,14 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
         
         # Use the found bill data
         bill = bill_lookup
+        
+        # Validate payment doesn't exceed remaining balance
+        remaining_balance = float(bill['patient_portion'])
+        if payment_amount > remaining_balance:
+            print(f"[SWAIG][CONSOLE] Payment amount ${payment_amount:.2f} exceeds remaining balance ${remaining_balance:.2f}")
+            logging.warning(f"[SWAIG] Payment amount ${payment_amount:.2f} exceeds remaining balance ${remaining_balance:.2f}")
+            return f"Payment amount ${payment_amount:.2f} exceeds the remaining balance of ${remaining_balance:.2f}. The maximum payment for this bill is ${remaining_balance:.2f}.", {}
+        
         new_portion = bill['patient_portion'] - float(amount)
         if new_portion > 0:
             new_status = 'partial'
@@ -3563,7 +3629,7 @@ def api_test_sms():
         mfa.client.messages.create(
             from_=os.getenv('FROM_NUMBER'),
             to=user['phone'],
-            body='This is a test SMS from your dental office portal.'
+            body='This is a test SMS from your SignalWire Dental Office System.'
         )
         return jsonify({'success': True}), 200
     except Exception as e:
@@ -5270,8 +5336,8 @@ if __name__ == '__main__':
     setup_logging()
     init_db_if_needed()
     schedule_cleanup_job()
-    print("\n=== Default Login Credentials ===")
-    print("Patient: jane.doe@email.com / patient123")
-    print("Dentist: dr.smith@dentaloffice.com / dentist123")
-    print("==============================\n")
+    print("=== Default Login Credentials ===")
+    print("Patient: jane.doe@test.tld / patient123")
+    print("Dentist: dr.smith@test.tld / dentist123")
+    print("=" * 30)
     app.run(host='0.0.0.0', port=8080, debug=True)
