@@ -111,6 +111,7 @@ body.dark-mode .mfa-input:focus {
                     <div class="mb-4">
                         <h5>Profile Information</h5>
                         <form id="profileForm" method="POST" action="{{ url_for('update_patient_profile') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="mb-3">
                                 <label for="firstName" class="form-label">First Name</label>
                                 <input type="text" class="form-control" id="firstName" name="first_name" value="{{ patient.first_name }}" required>
