@@ -37,7 +37,7 @@ class SignalWireMFA:
             payload = {
                 "to": to_number,
                 "from": self.from_number,
-                "message": "Here is your code: ",
+                "message": "Here is your SignalWire Dental Office System code: ",
                 "token_length": 6,
                 "max_attempts": 3,
                 "allow_alphas": False,
