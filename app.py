@@ -367,12 +367,11 @@ def dentist_dashboard():
         LIMIT 6
     ''', (session['user_id'],)).fetchall()
     
-    # Calculate monthly_revenue for this dentist using a join
+    # Calculate monthly_revenue for this dentist using direct dentist_id
     monthly_revenue = db.execute('''
         SELECT COALESCE(SUM(b.amount), 0)
         FROM billing b
-        JOIN appointments a ON b.appointment_id = a.id
-        WHERE a.dentist_id = ? AND strftime('%Y-%m', b.due_date) = strftime('%Y-%m', 'now')
+        WHERE b.dentist_id = ? AND strftime('%Y-%m', b.due_date) = strftime('%Y-%m', 'now')
     ''', (session['user_id'],)).fetchone()[0]
     
     return render_template(
@@ -1697,8 +1696,7 @@ def dentist_billing():
     balance = db.execute('''
         SELECT COALESCE(SUM(b.patient_portion), 0) as total
         FROM billing b
-        JOIN appointments a ON b.appointment_id = a.id
-        WHERE a.dentist_id = ? AND b.status != 'paid'
+        WHERE b.dentist_id = ? AND b.status != 'paid'
     ''', (session['user_id'],)).fetchone()
     current_balance = balance['total'] if balance and balance['total'] is not None else 0.0
 
@@ -1706,8 +1704,7 @@ def dentist_billing():
     next_bill = db.execute('''
         SELECT b.due_date
         FROM billing b
-        JOIN appointments a ON b.appointment_id = a.id
-        WHERE a.dentist_id = ? AND b.status != 'paid'
+        WHERE b.dentist_id = ? AND b.status != 'paid'
         ORDER BY b.due_date ASC
         LIMIT 1
     ''', (session['user_id'],)).fetchone()
@@ -1720,9 +1717,8 @@ def dentist_billing():
         FROM billing b
         LEFT JOIN treatment_history t ON b.reference_number = t.reference_number
         JOIN dental_services s ON b.service_id = s.id
-        JOIN appointments a ON b.appointment_id = a.id
-        JOIN patients p ON a.patient_id = p.id
-        WHERE a.dentist_id = ?
+        JOIN patients p ON b.patient_id = p.id
+        WHERE b.dentist_id = ?
         ORDER BY b.due_date DESC
     ''', (session['user_id'],)).fetchall()
 
@@ -1733,9 +1729,8 @@ def dentist_billing():
         FROM payments p
         JOIN payment_methods pm ON p.payment_method_id = pm.id
         JOIN billing b ON p.billing_id = b.id
-        JOIN appointments a ON b.appointment_id = a.id
-        JOIN patients pat ON a.patient_id = pat.id
-        WHERE a.dentist_id = ?
+        JOIN patients pat ON b.patient_id = pat.id
+        WHERE b.dentist_id = ?
         ORDER BY p.payment_date DESC
     ''', (session['user_id'],)).fetchall()
 
@@ -3222,7 +3217,13 @@ def swaig_make_payment(bill_id=None, amount=None, payment_method_id=None, challe
                 actual_bill_id = bill_id
                 print(f"[SWAIG][CONSOLE] Found bill by ID: {actual_bill_id}")
             else:
-                print(f"[SWAIG][CONSOLE] Bill ID {bill_id} not found, trying as reference number")
+                # Try by bill_number if not found by ID
+                bill_lookup = db.execute('SELECT id, patient_portion, status, reference_number FROM billing WHERE bill_number = ? AND patient_id = ?', (bill_id, patient['patient_id'])).fetchone()
+                if bill_lookup:
+                    actual_bill_id = str(bill_lookup['id'])
+                    print(f"[SWAIG][CONSOLE] Found bill by bill_number: {bill_id} -> Bill ID {actual_bill_id}")
+                else:
+                    print(f"[SWAIG][CONSOLE] Bill ID/Number {bill_id} not found, trying as reference number")
         
         # If not found by ID or not numeric, try as reference number
         if not actual_bill_id:
@@ -4354,9 +4355,11 @@ def swaig_get_bill_details(bill_id=None, challenge_token=None, meta_data_token=N
     db = get_db()
     
     # Get the bill with all details and verify it belongs to the authenticated patient
-    # Handle both numeric bill IDs and reference numbers
-    try:
-        # Try to convert to int - if successful, it's a numeric bill ID
+    # Handle numeric bill IDs, bill numbers, and reference numbers
+    bill = None
+    
+    # First try as numeric bill ID
+    if bill_id.isdigit():
         bill_id_int = int(bill_id)
         bill = db.execute('''
             SELECT b.*, 
@@ -4372,8 +4375,29 @@ def swaig_get_bill_details(bill_id=None, challenge_token=None, meta_data_token=N
             LEFT JOIN dentists d ON b.dentist_id = d.id
             WHERE b.id = ? AND b.patient_id = ?
         ''', (bill_id_int, patient_internal_id)).fetchone()
-    except ValueError:
-        # If conversion fails, treat it as a reference number
+        
+        # If not found by ID, try by bill_number
+        if not bill:
+            print(f"[SWAIG][CONSOLE] Bill ID {bill_id} not found, trying as bill_number")
+            bill = db.execute('''
+                SELECT b.*, 
+                       s.name as service_name, s.description as service_description, s.price as service_price,
+                       th.diagnosis, th.treatment_notes, th.treatment_date,
+                       CASE 
+                           WHEN d.first_name LIKE 'Dr.%' THEN d.first_name || ' ' || d.last_name
+                           ELSE 'Dr. ' || d.first_name || ' ' || d.last_name
+                       END as dentist_name
+                FROM billing b
+                JOIN dental_services s ON b.service_id = s.id
+                LEFT JOIN treatment_history th ON b.reference_number = th.reference_number
+                LEFT JOIN dentists d ON b.dentist_id = d.id
+                WHERE b.bill_number = ? AND b.patient_id = ?
+            ''', (bill_id, patient_internal_id)).fetchone()
+            if bill:
+                print(f"[SWAIG][CONSOLE] Found bill by bill_number: {bill_id}")
+    
+    # If still not found, try as reference number
+    if not bill:
         print(f"[SWAIG][CONSOLE] Treating {bill_id} as reference number")
         bill = db.execute('''
             SELECT b.*, 
